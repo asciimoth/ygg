@@ -18,11 +18,11 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
-	"github.com/yggdrasil-network/yggdrasil-go/src/admin"
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
-	"github.com/yggdrasil-network/yggdrasil-go/src/multicast"
-	"github.com/yggdrasil-network/yggdrasil-go/src/tun"
-	"github.com/yggdrasil-network/yggdrasil-go/src/version"
+	"github.com/asciimoth/ygg/src/admin"
+	"github.com/asciimoth/ygg/src/core"
+	"github.com/asciimoth/ygg/src/multicast"
+	"github.com/asciimoth/ygg/src/tun"
+	"github.com/asciimoth/ygg/src/version"
 )
 
 func main() {

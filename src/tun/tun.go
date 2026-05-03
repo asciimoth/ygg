@@ -15,9 +15,9 @@ import (
 	"github.com/Arceliar/phony"
 	wgtun "golang.zx2c4.com/wireguard/tun"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
-	"github.com/yggdrasil-network/yggdrasil-go/src/config"
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
+	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/src/config"
+	"github.com/asciimoth/ygg/src/core"
 )
 
 type MTU uint16

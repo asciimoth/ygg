@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set PKGSRC=github.com/yggdrasil-network/yggdrasil-go/src/version
+set PKGSRC=github.com/asciimoth/ygg/src/version
 
 set LDFLAGS=-X %PKGSRC%.buildName=%PKGNAME% -X %PKGSRC%.buildVersion=%PKGVER%
 set ARGS=-v

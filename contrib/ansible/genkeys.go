@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/cheggaaa/pb/v3"
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
+	"github.com/asciimoth/ygg/src/address"
 )
 
 var numHosts = flag.Int("hosts", 1, "number of host vars to generate")

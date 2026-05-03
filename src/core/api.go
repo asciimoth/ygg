@@ -11,7 +11,7 @@ import (
 	"github.com/Arceliar/phony"
 
 	"github.com/Arceliar/ironwood/network"
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
+	"github.com/asciimoth/ygg/src/address"
 )
 
 type SelfInfo struct {

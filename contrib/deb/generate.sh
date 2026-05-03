@@ -21,8 +21,8 @@ if [ $PKGBRANCH = "master" ]; then
   PKGREPLACES=yggdrasil-develop
 fi
 
-GOLDFLAGS="-X github.com/yggdrasil-network/yggdrasil-go/src/config.defaultConfig=/etc/yggdrasil/yggdrasil.conf"
-GOLDFLAGS="${GOLDFLAGS} -X github.com/yggdrasil-network/yggdrasil-go/src/config.defaultAdminListen=unix:///var/run/yggdrasil/yggdrasil.sock"
+GOLDFLAGS="-X github.com/asciimoth/ygg/src/config.defaultConfig=/etc/yggdrasil/yggdrasil.conf"
+GOLDFLAGS="${GOLDFLAGS} -X github.com/asciimoth/ygg/src/config.defaultAdminListen=unix:///var/run/yggdrasil/yggdrasil.sock"
 
 if [ $PKGARCH = "amd64" ]; then GOARCH=amd64 GOOS=linux ./build -l "${GOLDFLAGS}"
 elif [ $PKGARCH = "i386" ]; then GOARCH=386 GOOS=linux ./build -l "${GOLDFLAGS}"
@@ -44,7 +44,7 @@ mkdir -p /tmp/$PKGNAME/usr/bin/
 mkdir -p /tmp/$PKGNAME/lib/systemd/system/
 
 cat > /tmp/$PKGNAME/debian/changelog << EOF
-Please see https://github.com/yggdrasil-network/yggdrasil-go/
+Please see https://github.com/asciimoth/ygg/
 EOF
 echo 9 > /tmp/$PKGNAME/debian/compat
 cat > /tmp/$PKGNAME/debian/control << EOF
@@ -64,10 +64,10 @@ Description: Yggdrasil Network
  other Yggdrasil nodes.
 EOF
 cat > /tmp/$PKGNAME/debian/copyright << EOF
-Please see https://github.com/yggdrasil-network/yggdrasil-go/
+Please see https://github.com/asciimoth/ygg/
 EOF
 cat > /tmp/$PKGNAME/debian/docs << EOF
-Please see https://github.com/yggdrasil-network/yggdrasil-go/
+Please see https://github.com/asciimoth/ygg/
 EOF
 cat > /tmp/$PKGNAME/debian/install << EOF
 usr/bin/yggdrasil usr/bin

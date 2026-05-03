@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
+	"github.com/asciimoth/ygg/src/address"
 )
 
 type GetTreeRequest struct{}

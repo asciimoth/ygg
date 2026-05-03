@@ -1,4 +1,4 @@
-module github.com/yggdrasil-network/yggdrasil-go
+module github.com/asciimoth/ygg
 
 go 1.24.0
 

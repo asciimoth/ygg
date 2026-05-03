@@ -9,13 +9,13 @@ import (
 
 	"github.com/gologme/log"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
-	"github.com/yggdrasil-network/yggdrasil-go/src/config"
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
-	"github.com/yggdrasil-network/yggdrasil-go/src/ipv6rwc"
-	"github.com/yggdrasil-network/yggdrasil-go/src/multicast"
-	"github.com/yggdrasil-network/yggdrasil-go/src/tun"
-	"github.com/yggdrasil-network/yggdrasil-go/src/version"
+	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/src/config"
+	"github.com/asciimoth/ygg/src/core"
+	"github.com/asciimoth/ygg/src/ipv6rwc"
+	"github.com/asciimoth/ygg/src/multicast"
+	"github.com/asciimoth/ygg/src/tun"
+	"github.com/asciimoth/ygg/src/version"
 )
 
 // Yggdrasil mobile package is meant to "plug the gap" for mobile support, as

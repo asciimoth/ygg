@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/Arceliar/phony"
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
+	"github.com/asciimoth/ygg/src/address"
 	"golang.org/x/crypto/blake2b"
 )
 

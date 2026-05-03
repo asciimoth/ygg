@@ -13,8 +13,8 @@ import (
 
 	iwt "github.com/Arceliar/ironwood/types"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
+	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/src/core"
 )
 
 const keyStoreTimeout = 2 * time.Minute

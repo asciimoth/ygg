@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > This project is a fork of the original
-> [yggdrasil-go](https://github.com/yggdrasil-network/yggdrasil-go) project
+> [yggdrasil-go](https://github.com/asciimoth/ygg) project
 > with some modifications.
 > All credit goes to the original wireguard-go authors.
 

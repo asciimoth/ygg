@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
+	"github.com/asciimoth/ygg/src/core"
 )
 
 // TODO: Add authentication

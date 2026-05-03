@@ -10,7 +10,7 @@ import (
 	"github.com/hjson/hjson-go/v4"
 	"golang.org/x/text/encoding/unicode"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/config"
+	"github.com/asciimoth/ygg/src/config"
 )
 
 type CmdLineEnv struct {

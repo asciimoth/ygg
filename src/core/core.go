@@ -15,8 +15,8 @@ import (
 	"github.com/Arceliar/phony"
 	"github.com/gologme/log"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
-	"github.com/yggdrasil-network/yggdrasil-go/src/version"
+	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/src/version"
 )
 
 // The Core object represents the Yggdrasil node. You should create a Core

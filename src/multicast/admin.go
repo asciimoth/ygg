@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Arceliar/phony"
-	"github.com/yggdrasil-network/yggdrasil-go/src/admin"
+	"github.com/asciimoth/ygg/src/admin"
 )
 
 type GetMulticastInterfacesRequest struct{}
