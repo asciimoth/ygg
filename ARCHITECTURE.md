@@ -12,7 +12,8 @@ At runtime, the system is composed as:
    `gonnect.Network` selection for connection setup.
 3. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
 4. `admin` exposes a local control API over TCP or UNIX sockets.
-5. `multicast` discovers local peers and feeds them back into `core`.
+5. `multicast` optionally discovers local peers and feeds them back into
+   `core` through a small runtime adapter.
 6. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
 7. `tun` supervises a runtime attachment for that IPv6 packet stream.
 8. `tunnative` provides OS-specific native TUN creation/configuration for the
@@ -201,19 +202,27 @@ register handlers.
 Purpose:
 - Discover link-local peers on allowed interfaces.
 - Optionally advertise this node's presence.
-- Create trusted local listeners and ephemeral peerings through `core`.
+- Create trusted local listeners and ephemeral peerings through an injected
+  runtime interface.
 
 Main type:
 - `multicast.Multicast`
 
 Inputs:
-- `*core.Core`
+- a small runtime interface implemented by the daemon
 - interface regex configuration
 - beacon/listen/priority/password settings
+- protocol version
 
 Outputs into `core`:
-- `core.ListenLocal(...)` for interface-scoped local listeners
-- `core.CallPeer(...)` for discovered peers
+- `ListenLocal(...)` for interface-scoped local listeners
+- `CallPeer(...)` for discovered peers
+
+Decoupling boundary:
+- `src/multicast` does not import `src/core`.
+- `cmd/yggdrasil` adapts `*core.Core` to the narrow multicast runtime
+  interface at startup time.
+- Attaching multicast is optional and decided by the binary, not by `core`.
 
 This package is a peer discovery module only. It does not route data packets.
 
@@ -316,7 +325,7 @@ The daemon is intentionally small. Its job is to:
 - build the logger
 - instantiate `core`
 - attach `admin`
-- attach `multicast`
+- optionally attach `multicast`
 - create native TUNs through `tunnative` when configured
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
 - manage shutdown ordering
@@ -354,6 +363,11 @@ Platform-specific native TUN parameters from config are interpreted in
 `cmd/yggdrasil`, not inside `src/tun`.
 
 This keeps parsing concerns out of runtime packages.
+
+For multicast specifically, `cmd/yggdrasil` is also responsible for:
+- deciding whether the module is attached at all
+- passing the current Yggdrasil protocol version
+- adapting `*core.Core` to the narrow interface expected by `src/multicast`
 
 ### 2. Peer transport to routed overlay
 
@@ -466,7 +480,8 @@ preserving file layout.
 
 - `core` enforces incoming peer policy such as `AllowedPublicKeys`.
 - `core.PeerFilter` rejects unwanted remote IPs during peering.
-- `multicast` uses `ListenLocal` for locally discovered peers so they are not
+- `multicast` uses its injected `ListenLocal` hook for locally discovered
+  peers so they are not
   blocked by the normal allowed-key policy.
 - `admin` currently has no authentication and should be treated as a local
   privileged control surface.
