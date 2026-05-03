@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
+	github.com/asciimoth/gonnect v0.11.0
 	github.com/coder/websocket v1.8.14
 	github.com/gologme/log v1.3.0
 	github.com/hashicorp/go-syslog v1.0.0
@@ -23,6 +24,7 @@ require (
 )
 
 require (
+	github.com/asciimoth/bufpool v0.3.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

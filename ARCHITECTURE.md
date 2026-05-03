@@ -8,11 +8,13 @@ and CLI around them.
 At runtime, the system is composed as:
 
 1. `config` loads or generates node configuration and identity material.
-2. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
-3. `admin` exposes a local control API over TCP or UNIX sockets.
-4. `multicast` discovers local peers and feeds them back into `core`.
-5. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
-6. `tun` connects that IPv6 packet stream to the operating system TUN device.
+2. `transport` provides pluggable carrier transports and host-scoped
+   `gonnect.Network` selection for connection setup.
+3. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
+4. `admin` exposes a local control API over TCP or UNIX sockets.
+5. `multicast` discovers local peers and feeds them back into `core`.
+6. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
+7. `tun` connects that IPv6 packet stream to the operating system TUN device.
 
 `cmd/yggdrasil` is the composition root. It wires the packages together but
 keeps most behavior inside `src/`.
@@ -88,6 +90,59 @@ The internal abstraction is:
 Each carrier is responsible for turning its scheme into a reliable ordered
 `net.Conn`. Once a connection is established and the remote public key is known,
 `core` passes ownership into Ironwood with `HandleConn`.
+
+This remains the legacy in-core implementation. New transport-focused code
+should prefer the standalone `transport` package when only carrier setup and
+network selection are needed, leaving peer policy, reconnection behavior,
+handshakes, and overlay ownership in `core`.
+
+### `transport`
+
+Purpose:
+- Provide a standalone carrier transport abstraction decoupled from `core`.
+- Allow runtime registration of transports by URL scheme, with no hardcoded
+  built-ins inside the manager.
+- Select a `gonnect.Network` per host using a default network plus wildcard
+  host mappings.
+- Track dialed connections, listeners, and listener-accepted child
+  connections so live network remaps can force-close affected resources.
+
+Main type:
+- `transport.Manager`
+
+Main interfaces:
+- `transport.Transport`
+  - `Schemes() []string`
+  - `Dial(ctx, network, url, options) (net.Conn, error)`
+  - `Listen(ctx, network, url, options) (net.Listener, error)`
+- `transport.Options`
+  - per-call carrier options such as source-interface selection
+
+Behavior:
+- Routes `Dial` and `Listen` by URL scheme to registered transports.
+- Also exposes option-aware `DialWithOptions` and `ListenWithOptions` entry
+  points, while keeping zero-option helpers for simple callers.
+- Chooses the `gonnect.Network` to pass into a transport based on the target
+  host, preferring the most specific matching host pattern.
+- Passes the original URL through to transports so carrier-specific query
+  parameters such as TLS `sni` can be implemented at the transport layer while
+  unrelated parameters remain available to higher layers.
+- Rejects operations when the selected network mapping is `nil`.
+- Supports live `SetDefaultNetwork`, `MapNetwork`, and `UnmapNetwork` updates.
+- Closes all affected listeners, accepted children, and dialed connections when
+  a mapping changes so no resource survives on the wrong network.
+- Treats `Options.SourceInterface` as a best-effort hint in the built-in TCP
+  and TLS transports: use it when the selected `gonnect.Network` and underlying
+  socket implementation support interface-aware dialing or binding, otherwise
+  continue with the normal connection path.
+
+Current built-in transport implementations in this repository:
+- TCP
+- TLS
+
+The transport package intentionally does not implement peer reconnection,
+timeouts, password protection, or Yggdrasil handshakes. Those concerns stay in
+higher layers such as `core`.
 
 #### Protocol subsystem
 
@@ -352,4 +407,3 @@ preserving file layout.
   blocked by the normal allowed-key policy.
 - `admin` currently has no authentication and should be treated as a local
   privileged control surface.
-

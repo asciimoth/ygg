@@ -2,6 +2,10 @@ github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e h1:s7MuhcZu2hNfV
 github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e/go.mod h1:SrrElc3FFMpYCODSr11jWbLFeOM8WsY+DbDY/l2AXF0=
 github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d h1:UK9fsWbWqwIQkMCz1CP+v5pGbsGoWAw6g4AyvMpm1EM=
 github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d/go.mod h1:BCnxhRf47C/dy/e/D2pmB8NkB3dQVIrkD98b220rx5Q=
+github.com/asciimoth/bufpool v0.3.0 h1:tQMop/kZ3eOLSorM9i0cqtOIpxWQUroGZ6oNk5DTnQc=
+github.com/asciimoth/bufpool v0.3.0/go.mod h1:JV6H4hpj2bCS5Svr0wNqR+XOZFOOkdXfNZxCjm/3QHw=
+github.com/asciimoth/gonnect v0.11.0 h1:6iD4oyi+DrsDKLNwRw7VYHPi5gS2FGcUoP6QlyWWOTo=
+github.com/asciimoth/gonnect v0.11.0/go.mod h1:XwXDVDjucVhOa/cifySEx+ij8veNKhtzUTnCdF1p+ug=
 github.com/bits-and-blooms/bitset v1.24.2/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/bits-and-blooms/bitset v1.24.4 h1:95H15Og1clikBrKr/DuzMXkQzECs1M6hhoGXLwLQOZE=
 github.com/bits-and-blooms/bitset v1.24.4/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
