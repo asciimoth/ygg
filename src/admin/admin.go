@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"os"
 	"sort"
-
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/asciimoth/ygg/src/core"
@@ -18,12 +18,13 @@ import (
 // TODO: Add authentication
 
 type AdminSocket struct {
-	core     *core.Core
-	log      core.Logger
-	listener net.Listener
-	handlers map[string]handler
-	done     chan struct{}
-	config   struct {
+	core       *core.Core
+	log        core.Logger
+	listener   net.Listener
+	handlersMu sync.RWMutex
+	handlers   map[string]handler
+	done       chan struct{}
+	config     struct {
 		listenaddr ListenAddress
 	}
 }
@@ -61,6 +62,8 @@ type ListEntry struct {
 
 // AddHandler is called for each admin function to add the handler and help documentation to the API.
 func (a *AdminSocket) AddHandler(name, desc string, args []string, handlerfunc HandlerFunc) error {
+	a.handlersMu.Lock()
+	defer a.handlersMu.Unlock()
 	if _, ok := a.handlers[strings.ToLower(name)]; ok {
 		return errors.New("handler already exists")
 	}
@@ -133,6 +136,7 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 
 	_ = a.AddHandler("list", "List available commands", []string{}, func(_ json.RawMessage) (interface{}, error) {
 		res := &ListResponse{}
+		a.handlersMu.RLock()
 		for name, handler := range a.handlers {
 			res.List = append(res.List, ListEntry{
 				Command:     name,
@@ -140,6 +144,7 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 				Fields:      handler.args,
 			})
 		}
+		a.handlersMu.RUnlock()
 		sort.SliceStable(res.List, func(i, j int) bool {
 			return strings.Compare(res.List[i].Command, res.List[j].Command) < 0
 		})
@@ -382,7 +387,9 @@ func (a *AdminSocket) handleRequest(conn net.Conn) {
 				return fmt.Errorf("no request specified")
 			}
 			reqname := strings.ToLower(req.Name)
+			a.handlersMu.RLock()
 			handler, ok := a.handlers[reqname]
+			a.handlersMu.RUnlock()
 			if !ok {
 				return fmt.Errorf("unknown action '%s', try 'list' for help", reqname)
 			}

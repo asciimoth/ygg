@@ -154,12 +154,13 @@ func (s *attachmentSession) eventLoop(tun *TunAdapter) {
 				return
 			}
 			if event&1 != 0 || event&2 != 0 || event&4 != 0 {
+				report := sessionReport{session: s, kind: sessionReportEvent, event: event}
 				if event&4 != 0 {
 					if mtu, err := s.device.MTU(); err == nil {
-						s.mtu = getSupportedMTU(uint64(mtu))
+						report.mtu = getSupportedMTU(uint64(mtu))
 					}
 				}
-				tun.reportCh <- sessionReport{session: s, kind: sessionReportEvent, event: event}
+				tun.reportCh <- report
 			}
 		}
 	}

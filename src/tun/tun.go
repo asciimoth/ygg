@@ -97,6 +97,7 @@ type sessionReport struct {
 	session *attachmentSession
 	kind    sessionReportKind
 	event   gtun.Event
+	mtu     uint64
 }
 
 type sessionReportKind uint8
@@ -388,8 +389,9 @@ func (s *supervisorState) handleReport(tun *TunAdapter, report sessionReport) {
 			s.status.Enabled = true
 		}
 		if report.event&gtun.EventMTUUpdate != 0 {
-			s.status.MTU = report.session.mtu
-			tun.rwc.SetMTU(report.session.mtu)
+			s.current.mtu = report.mtu
+			s.status.MTU = report.mtu
+			tun.rwc.SetMTU(report.mtu)
 		}
 	}
 }

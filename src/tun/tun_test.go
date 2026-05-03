@@ -67,6 +67,7 @@ func (f *fakeRWC) lastWrite() []byte {
 }
 
 type fakeTun struct {
+	mu      sync.Mutex
 	name    string
 	mtu     int
 	mwo     int
@@ -95,13 +96,23 @@ func newFakeTun(name string, mtu, mwo, mro int) *fakeTun {
 	}
 }
 
-func (f *fakeTun) File() *os.File            { return nil }
-func (f *fakeTun) MWO() int                  { return f.mwo }
-func (f *fakeTun) MRO() int                  { return f.mro }
-func (f *fakeTun) MTU() (int, error)         { return f.mtu, nil }
+func (f *fakeTun) File() *os.File { return nil }
+func (f *fakeTun) MWO() int       { return f.mwo }
+func (f *fakeTun) MRO() int       { return f.mro }
+func (f *fakeTun) MTU() (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mtu, nil
+}
 func (f *fakeTun) Name() (string, error)     { return f.name, nil }
 func (f *fakeTun) Events() <-chan gtun.Event { return f.events }
 func (f *fakeTun) BatchSize() int            { return f.batch }
+
+func (f *fakeTun) setMTU(mtu int) {
+	f.mu.Lock()
+	f.mtu = mtu
+	f.mu.Unlock()
+}
 
 func (f *fakeTun) Read(bufs [][]byte, sizes []int, offset int) (int, error) {
 	select {
@@ -249,7 +260,7 @@ func TestTunAdapterEventsAndMTU(t *testing.T) {
 	ft.events <- gtun.EventUp
 	waitFor(t, func() bool { return adapter.Status().Enabled })
 
-	ft.mtu = 1280
+	ft.setMTU(1280)
 	ft.events <- gtun.EventMTUUpdate
 	waitFor(t, func() bool { return adapter.Status().MTU == 1280 && rwc.currentMTU() == 1280 })
 
@@ -257,6 +268,49 @@ func TestTunAdapterEventsAndMTU(t *testing.T) {
 		t.Fatalf("Close(): %v", err)
 	}
 	waitFor(t, func() bool { return adapter.Status().State == StateDetached && !adapter.Status().Attached })
+}
+
+func TestTunAdapterConcurrentMTUUpdatesAndPackets(t *testing.T) {
+	rwc := newFakeRWC()
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(1500))
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	defer func() {
+		_ = adapter.Stop()
+		_ = rwc.Close()
+	}()
+
+	ft := newFakeTun("tun-race", 1500, 0, 0)
+	if err := adapter.Attach(ft, AttachmentType("fake")); err != nil {
+		t.Fatalf("Attach(): %v", err)
+	}
+	waitFor(t, func() bool { return adapter.Status().Enabled })
+
+	const finalMTU = 1409
+
+	packetDone := make(chan struct{})
+	go func() {
+		defer close(packetDone)
+		for i := 0; i < 200; i++ {
+			select {
+			case rwc.readCh <- []byte{byte(i), byte(i >> 8), 1, 2, 3, 4}:
+			case <-ft.closeCh:
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < 10; i++ {
+		ft.setMTU(1400 + i)
+		ft.events <- gtun.EventMTUUpdate
+	}
+
+	waitFor(t, func() bool {
+		status := adapter.Status()
+		return status.Attached && status.MTU == finalMTU && rwc.currentMTU() == finalMTU
+	})
+	<-packetDone
 }
 
 func TestTunAdapterAttachVTun(t *testing.T) {
