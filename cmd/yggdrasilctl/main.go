@@ -16,8 +16,6 @@ import (
 	"suah.dev/protect"
 
 	"github.com/asciimoth/ygg/src/admin"
-	"github.com/asciimoth/ygg/src/core"
-	"github.com/asciimoth/ygg/src/multicast"
 	"github.com/asciimoth/ygg/src/tun"
 	"github.com/asciimoth/ygg/src/version"
 	"github.com/olekukonko/tablewriter"
@@ -287,7 +285,7 @@ func run() int {
 		_ = table.Render()
 
 	case "getnodeinfo":
-		var resp core.GetNodeInfoResponse
+		var resp admin.GetNodeInfoResponse
 		if err := json.Unmarshal(recv.Response, &resp); err != nil {
 			panic(err)
 		}
@@ -297,7 +295,7 @@ func run() int {
 		}
 
 	case "getmulticastinterfaces":
-		var resp multicast.GetMulticastInterfacesResponse
+		var resp admin.GetMulticastInterfacesResponse
 		if err := json.Unmarshal(recv.Response, &resp); err != nil {
 			panic(err)
 		}
@@ -320,7 +318,7 @@ func run() int {
 		_ = table.Render()
 
 	case "gettun":
-		var resp tun.GetTUNResponse
+		var resp tun.Status
 		if err := json.Unmarshal(recv.Response, &resp); err != nil {
 			panic(err)
 		}

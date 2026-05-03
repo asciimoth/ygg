@@ -1,20 +1,13 @@
 package multicast
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 
 	"github.com/Arceliar/phony"
-	"github.com/asciimoth/ygg/src/admin"
 )
 
-type GetMulticastInterfacesRequest struct{}
-type GetMulticastInterfacesResponse struct {
-	Interfaces []MulticastInterfaceState `json:"multicast_interfaces"`
-}
-
-type MulticastInterfaceState struct {
+type InterfaceState struct {
 	Name     string `json:"name"`
 	Address  string `json:"address"`
 	Beacon   bool   `json:"beacon"`
@@ -22,11 +15,11 @@ type MulticastInterfaceState struct {
 	Password bool   `json:"password"`
 }
 
-func (m *Multicast) getMulticastInterfacesHandler(_ *GetMulticastInterfacesRequest, res *GetMulticastInterfacesResponse) error {
-	res.Interfaces = []MulticastInterfaceState{}
+func (m *Multicast) InterfaceStates() []InterfaceState {
+	states := []InterfaceState{}
 	phony.Block(m, func() {
 		for name, intf := range m._interfaces {
-			is := MulticastInterfaceState{
+			is := InterfaceState{
 				Name:     intf.iface.Name,
 				Beacon:   intf.beacon,
 				Listen:   intf.listen,
@@ -37,28 +30,11 @@ func (m *Multicast) getMulticastInterfacesHandler(_ *GetMulticastInterfacesReque
 			} else {
 				is.Address = "-"
 			}
-			res.Interfaces = append(res.Interfaces, is)
+			states = append(states, is)
 		}
 	})
-	slices.SortStableFunc(res.Interfaces, func(a, b MulticastInterfaceState) int {
+	slices.SortStableFunc(states, func(a, b InterfaceState) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	return nil
-}
-
-func (m *Multicast) SetupAdminHandlers(a *admin.AdminSocket) {
-	_ = a.AddHandler(
-		"getMulticastInterfaces", "Show which interfaces multicast is enabled on", []string{},
-		func(in json.RawMessage) (interface{}, error) {
-			req := &GetMulticastInterfacesRequest{}
-			res := &GetMulticastInterfacesResponse{}
-			if err := json.Unmarshal(in, &req); err != nil {
-				return nil, err
-			}
-			if err := m.getMulticastInterfacesHandler(req, res); err != nil {
-				return nil, err
-			}
-			return res, nil
-		},
-	)
+	return states
 }

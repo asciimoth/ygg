@@ -42,10 +42,12 @@ type AdminSocketResponse struct {
 }
 
 type handler struct {
-	desc    string              // What does the endpoint do?
-	args    []string            // List of human-readable argument names
-	handler core.AddHandlerFunc // First is input map, second is output
+	desc    string      // What does the endpoint do?
+	args    []string    // List of human-readable argument names
+	handler HandlerFunc // First is input map, second is output
 }
+
+type HandlerFunc func(json.RawMessage) (interface{}, error)
 
 type ListResponse struct {
 	List []ListEntry `json:"list"`
@@ -58,7 +60,7 @@ type ListEntry struct {
 }
 
 // AddHandler is called for each admin function to add the handler and help documentation to the API.
-func (a *AdminSocket) AddHandler(name, desc string, args []string, handlerfunc core.AddHandlerFunc) error {
+func (a *AdminSocket) AddHandler(name, desc string, args []string, handlerfunc HandlerFunc) error {
 	if _, ok := a.handlers[strings.ToLower(name)]; ok {
 		return errors.New("handler already exists")
 	}
@@ -145,10 +147,10 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 	})
 	a.done = make(chan struct{})
 	go a.listen()
-	return a, a.core.SetAdmin(a)
+	return a, nil
 }
 
-func (a *AdminSocket) SetupAdminHandlers() {
+func (a *AdminSocket) SetupCoreHandlers() {
 	_ = a.AddHandler(
 		"getSelf", "Show details about this node", []string{},
 		func(in json.RawMessage) (interface{}, error) {
@@ -161,6 +163,62 @@ func (a *AdminSocket) SetupAdminHandlers() {
 				return nil, err
 			}
 			return res, nil
+		},
+	)
+	_ = a.AddHandler(
+		"getNodeInfo", "Request nodeinfo from a remote node by its public key", []string{"key"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &GetNodeInfoRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			info, err := a.core.GetNodeInfo(req.Key)
+			if err != nil {
+				return nil, err
+			}
+			return GetNodeInfoResponse{req.Key: info}, nil
+		},
+	)
+	_ = a.AddHandler(
+		"debug_remoteGetSelf", "Debug use only", []string{"key"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &DebugRemoteGetRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			info, err := a.core.DebugRemoteGetSelf(req.Key)
+			if err != nil {
+				return nil, err
+			}
+			return DebugGetSelfResponse{keyToIP(req.Key): json.RawMessage(info)}, nil
+		},
+	)
+	_ = a.AddHandler(
+		"debug_remoteGetPeers", "Debug use only", []string{"key"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &DebugRemoteGetRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			keys, err := a.core.DebugRemoteGetPeers(req.Key)
+			if err != nil {
+				return nil, err
+			}
+			return DebugGetPeersResponse{keyToIP(req.Key): DebugKeys{Keys: keys}}, nil
+		},
+	)
+	_ = a.AddHandler(
+		"debug_remoteGetTree", "Debug use only", []string{"key"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &DebugRemoteGetRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			keys, err := a.core.DebugRemoteGetTree(req.Key)
+			if err != nil {
+				return nil, err
+			}
+			return DebugGetTreeResponse{keyToIP(req.Key): DebugKeys{Keys: keys}}, nil
 		},
 	)
 	_ = a.AddHandler(

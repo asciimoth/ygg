@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	iwt "github.com/Arceliar/ironwood/types"
 	"github.com/Arceliar/phony"
-
-	"github.com/asciimoth/ygg/src/address"
 )
 
 const (
@@ -232,23 +229,15 @@ func (p *protoHandler) _handleGetTreeResponse(key keyArray, bs []byte) {
 	}
 }
 
-// Admin socket stuff for "Get self"
-
-type DebugGetSelfRequest struct {
-	Key string `json:"key"`
+func (c *Core) DebugRemoteGetSelf(key string) ([]byte, error) {
+	return c.proto.debugRemoteGetSelf(key)
 }
 
-type DebugGetSelfResponse map[string]interface{}
-
-func (p *protoHandler) getSelfHandler(in json.RawMessage) (interface{}, error) {
-	var req DebugGetSelfRequest
-	if err := json.Unmarshal(in, &req); err != nil {
-		return nil, err
-	}
+func (p *protoHandler) debugRemoteGetSelf(keyHex string) ([]byte, error) {
 	var key keyArray
 	var kbs []byte
 	var err error
-	if kbs, err = hex.DecodeString(req.Key); err != nil {
+	if kbs, err = hex.DecodeString(keyHex); err != nil {
 		return nil, err
 	}
 	if len(kbs) != ed25519.PublicKeySize {
@@ -263,33 +252,19 @@ func (p *protoHandler) getSelfHandler(in json.RawMessage) (interface{}, error) {
 	case <-time.After(6 * time.Second):
 		return nil, errors.New("timeout")
 	case info := <-ch:
-		var msg json.RawMessage
-		if err := msg.UnmarshalJSON(info); err != nil {
-			return nil, err
-		}
-		ip := net.IP(address.AddrForKey(kbs)[:])
-		res := DebugGetSelfResponse{ip.String(): msg}
-		return res, nil
+		return append([]byte(nil), info...), nil
 	}
 }
 
-// Admin socket stuff for "Get peers"
-
-type DebugGetPeersRequest struct {
-	Key string `json:"key"`
+func (c *Core) DebugRemoteGetPeers(key string) ([]string, error) {
+	return c.proto.debugRemoteGetPeers(key)
 }
 
-type DebugGetPeersResponse map[string]interface{}
-
-func (p *protoHandler) getPeersHandler(in json.RawMessage) (interface{}, error) {
-	var req DebugGetPeersRequest
-	if err := json.Unmarshal(in, &req); err != nil {
-		return nil, err
-	}
+func (p *protoHandler) debugRemoteGetPeers(keyHex string) ([]string, error) {
 	var key keyArray
 	var kbs []byte
 	var err error
-	if kbs, err = hex.DecodeString(req.Key); err != nil {
+	if kbs, err = hex.DecodeString(keyHex); err != nil {
 		return nil, err
 	}
 	if len(kbs) != ed25519.PublicKeySize {
@@ -304,43 +279,25 @@ func (p *protoHandler) getPeersHandler(in json.RawMessage) (interface{}, error) 
 	case <-time.After(6 * time.Second):
 		return nil, errors.New("timeout")
 	case info := <-ch:
-		ks := make(map[string][]string)
+		var keys []string
 		bs := info
 		for len(bs) >= len(key) {
-			ks["keys"] = append(ks["keys"], hex.EncodeToString(bs[:len(key)]))
+			keys = append(keys, hex.EncodeToString(bs[:len(key)]))
 			bs = bs[len(key):]
 		}
-		js, err := json.Marshal(ks)
-		if err != nil {
-			return nil, err
-		}
-		var msg json.RawMessage
-		if err := msg.UnmarshalJSON(js); err != nil {
-			return nil, err
-		}
-		ip := net.IP(address.AddrForKey(kbs)[:])
-		res := DebugGetPeersResponse{ip.String(): msg}
-		return res, nil
+		return keys, nil
 	}
 }
 
-// Admin socket stuff for "Get Tree"
-
-type DebugGetTreeRequest struct {
-	Key string `json:"key"`
+func (c *Core) DebugRemoteGetTree(key string) ([]string, error) {
+	return c.proto.debugRemoteGetTree(key)
 }
 
-type DebugGetTreeResponse map[string]interface{}
-
-func (p *protoHandler) getTreeHandler(in json.RawMessage) (interface{}, error) {
-	var req DebugGetTreeRequest
-	if err := json.Unmarshal(in, &req); err != nil {
-		return nil, err
-	}
+func (p *protoHandler) debugRemoteGetTree(keyHex string) ([]string, error) {
 	var key keyArray
 	var kbs []byte
 	var err error
-	if kbs, err = hex.DecodeString(req.Key); err != nil {
+	if kbs, err = hex.DecodeString(keyHex); err != nil {
 		return nil, err
 	}
 	if len(kbs) != ed25519.PublicKeySize {
@@ -355,22 +312,12 @@ func (p *protoHandler) getTreeHandler(in json.RawMessage) (interface{}, error) {
 	case <-time.After(6 * time.Second):
 		return nil, errors.New("timeout")
 	case info := <-ch:
-		ks := make(map[string][]string)
+		var keys []string
 		bs := info
 		for len(bs) >= len(key) {
-			ks["keys"] = append(ks["keys"], hex.EncodeToString(bs[:len(key)]))
+			keys = append(keys, hex.EncodeToString(bs[:len(key)]))
 			bs = bs[len(key):]
 		}
-		js, err := json.Marshal(ks)
-		if err != nil {
-			return nil, err
-		}
-		var msg json.RawMessage
-		if err := msg.UnmarshalJSON(js); err != nil {
-			return nil, err
-		}
-		ip := net.IP(address.AddrForKey(kbs)[:])
-		res := DebugGetTreeResponse{ip.String(): msg}
-		return res, nil
+		return keys, nil
 	}
 }

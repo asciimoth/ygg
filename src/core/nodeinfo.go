@@ -130,25 +130,18 @@ func (m *nodeinfo) _sendRes(key keyArray) {
 	_, _ = m.proto.core.PacketConn.WriteTo(bs, iwt.Addr(key[:]))
 }
 
-// Admin socket stuff
-
-type GetNodeInfoRequest struct {
-	Key string `json:"key"`
+func (c *Core) GetNodeInfo(key string) (json.RawMessage, error) {
+	return c.proto.nodeinfo.getNodeInfo(key)
 }
-type GetNodeInfoResponse map[string]json.RawMessage
 
-func (m *nodeinfo) nodeInfoAdminHandler(in json.RawMessage) (interface{}, error) {
-	var req GetNodeInfoRequest
-	if err := json.Unmarshal(in, &req); err != nil {
-		return nil, err
-	}
-	if req.Key == "" {
+func (m *nodeinfo) getNodeInfo(keyHex string) (json.RawMessage, error) {
+	if keyHex == "" {
 		return nil, fmt.Errorf("no remote public key supplied")
 	}
 	var key keyArray
 	var kbs []byte
 	var err error
-	if kbs, err = hex.DecodeString(req.Key); err != nil {
+	if kbs, err = hex.DecodeString(keyHex); err != nil {
 		return nil, fmt.Errorf("failed to decode public key: %w", err)
 	}
 	copy(key[:], kbs)
@@ -166,8 +159,6 @@ func (m *nodeinfo) nodeInfoAdminHandler(in json.RawMessage) (interface{}, error)
 		if err := msg.UnmarshalJSON(info); err != nil {
 			return nil, err
 		}
-		key := hex.EncodeToString(kbs[:])
-		res := GetNodeInfoResponse{key: msg}
-		return res, nil
+		return msg, nil
 	}
 }

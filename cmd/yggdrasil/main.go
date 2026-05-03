@@ -281,7 +281,7 @@ func main() {
 			panic(err)
 		}
 		if n.admin != nil {
-			n.admin.SetupAdminHandlers()
+			n.admin.SetupCoreHandlers()
 		}
 	}
 
@@ -306,7 +306,7 @@ func main() {
 			panic(err)
 		}
 		if n.admin != nil && n.multicast != nil {
-			n.multicast.SetupAdminHandlers(n.admin)
+			n.admin.SetupMulticastHandlers(n.multicast)
 		}
 	}
 
@@ -336,7 +336,7 @@ func main() {
 			}
 		}
 		if n.admin != nil && n.tun != nil {
-			n.tun.SetupAdminHandlers(n.admin)
+			n.admin.SetupTunHandlers(n.tun)
 		}
 	}
 
