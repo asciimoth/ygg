@@ -10,8 +10,6 @@ import (
 
 	"github.com/asciimoth/gonnect-netstack/vtun"
 	gtun "github.com/asciimoth/gonnect/tun"
-
-	"github.com/asciimoth/ygg/src/address"
 )
 
 type testLogger struct{}
@@ -57,13 +55,11 @@ func (f *fakeRWC) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (f *fakeRWC) Close() error             { close(f.readCh); return nil }
-func (f *fakeRWC) Address() address.Address { return address.Address{} }
-func (f *fakeRWC) Subnet() address.Subnet   { return address.Subnet{} }
-func (f *fakeRWC) MaxMTU() uint64           { return 9000 }
-func (f *fakeRWC) SetMTU(mtu uint64)        { f.mu.Lock(); f.mtu = mtu; f.mu.Unlock() }
-func (f *fakeRWC) currentMTU() uint64       { f.mu.Lock(); defer f.mu.Unlock(); return f.mtu }
-func (f *fakeRWC) writeCount() int          { f.mu.Lock(); defer f.mu.Unlock(); return len(f.writes) }
+func (f *fakeRWC) Close() error       { close(f.readCh); return nil }
+func (f *fakeRWC) MaxMTU() uint64     { return 9000 }
+func (f *fakeRWC) SetMTU(mtu uint64)  { f.mu.Lock(); f.mtu = mtu; f.mu.Unlock() }
+func (f *fakeRWC) currentMTU() uint64 { f.mu.Lock(); defer f.mu.Unlock(); return f.mtu }
+func (f *fakeRWC) writeCount() int    { f.mu.Lock(); defer f.mu.Unlock(); return len(f.writes) }
 func (f *fakeRWC) lastWrite() []byte {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -152,7 +148,7 @@ func waitFor(tb testing.TB, fn func() bool) {
 
 func TestTunAdapterStartsDetached(t *testing.T) {
 	rwc := newFakeRWC()
-	adapter, err := New(rwc, testLogger{}, InterfaceName("none"), InterfaceMTU(1400))
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(1400))
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
@@ -172,7 +168,7 @@ func TestTunAdapterStartsDetached(t *testing.T) {
 
 func TestTunAdapterAttachDetachReplace(t *testing.T) {
 	rwc := newFakeRWC()
-	adapter, err := New(rwc, testLogger{}, InterfaceName("none"), InterfaceMTU(1500))
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(1500))
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
@@ -232,7 +228,7 @@ func TestTunAdapterAttachDetachReplace(t *testing.T) {
 
 func TestTunAdapterEventsAndMTU(t *testing.T) {
 	rwc := newFakeRWC()
-	adapter, err := New(rwc, testLogger{}, InterfaceName("none"), InterfaceMTU(1500))
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(1500))
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
@@ -265,7 +261,7 @@ func TestTunAdapterEventsAndMTU(t *testing.T) {
 
 func TestTunAdapterAttachVTun(t *testing.T) {
 	rwc := newFakeRWC()
-	adapter, err := New(rwc, testLogger{}, InterfaceName("none"), InterfaceMTU(1500))
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(1500))
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}

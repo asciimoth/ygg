@@ -1,6 +1,6 @@
 //go:build linux || android
 
-package tun
+package tunnative
 
 import (
 	"fmt"
@@ -10,17 +10,17 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	ifname := string(tun.config.name)
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	ifname := cfg.Name
 	if ifname == "auto" {
 		ifname = "\000"
 	}
-	device, err := tuntap.CreateTUN(ifname, int(mtu))
+	device, err := tuntap.CreateTUN(ifname, int(cfg.MTU))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
-	if addr != "" {
-		if err := tun.configureAddress(device, addr, mtu); err != nil {
+	if cfg.Address != "" {
+		if err := configureAddress(log, device, cfg.Address, cfg.MTU); err != nil {
 			_ = device.Close()
 			return nil, err
 		}
@@ -28,7 +28,7 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 	return device, nil
 }
 
-func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string, mtu uint64) error {
+func configureAddress(log Logger, device gtun.Tun, addr string, mtu uint64) error {
 	nladdr, err := netlink.ParseAddr(addr)
 	if err != nil {
 		return fmt.Errorf("couldn't parse address %q: %w", addr, err)
@@ -54,8 +54,8 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string, mtu uint64
 	if err := netlink.LinkSetUp(nlintf); err != nil {
 		return fmt.Errorf("failed to bring link up: %w", err)
 	}
-	tun.log.Infof("Interface name: %s", name)
-	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", effectiveMTU)
+	log.Infof("Interface name: %s", name)
+	log.Infof("Interface IPv6: %s", addr)
+	log.Infof("Interface MTU: %d", effectiveMTU)
 	return nil
 }

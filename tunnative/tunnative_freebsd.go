@@ -1,6 +1,6 @@
 //go:build freebsd
 
-package tun
+package tunnative
 
 import (
 	"encoding/binary"
@@ -32,13 +32,13 @@ type in6IfreqAddr struct {
 	ifruAddr sockaddrIn6FreeBSD
 }
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	device, err := tuntap.CreateTUN(string(tun.config.name), int(mtu))
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	device, err := tuntap.CreateTUN(cfg.Name, int(cfg.MTU))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
-	if addr != "" {
-		if err := tun.configureAddress(device, addr, mtu); err != nil {
+	if cfg.Address != "" {
+		if err := configureAddress(log, device, cfg.Address, cfg.MTU); err != nil {
 			_ = device.Close()
 			return nil, err
 		}
@@ -46,21 +46,21 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 	return device, nil
 }
 
-func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string, mtu uint64) error {
+func configureAddress(log Logger, device gtun.Tun, addr string, mtu uint64) error {
 	name, err := device.Name()
 	if err != nil {
 		return err
 	}
 	sfd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		tun.log.Printf("Create AF_INET socket failed: %v.", err)
+		log.Printf("Create AF_INET socket failed: %v.", err)
 		return err
 	}
 	defer unix.Close(sfd)
 
-	tun.log.Infof("Interface name: %s", name)
-	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", mtu)
+	log.Infof("Interface name: %s", name)
+	log.Infof("Interface IPv6: %s", addr)
+	log.Infof("Interface MTU: %d", mtu)
 
 	var ar in6IfreqAddr
 	copy(ar.ifrName[:], name)
@@ -76,13 +76,13 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string, mtu uint64
 
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(sfd), uintptr(siocsIFAddrIN6), uintptr(unsafe.Pointer(&ar))); errno != 0 {
 		err = errno
-		tun.log.Errorf("Error in SIOCSIFADDR_IN6: %v", errno)
+		log.Errorf("Error in SIOCSIFADDR_IN6: %v", errno)
 		cmd := exec.Command("ifconfig", name, "inet6", addr)
-		tun.log.Warnf("Using ifconfig as fallback: %v", strings.Join(cmd.Args, " "))
+		log.Warnf("Using ifconfig as fallback: %v", strings.Join(cmd.Args, " "))
 		output, cerr := cmd.CombinedOutput()
 		if cerr != nil {
-			tun.log.Errorf("SIOCSIFADDR_IN6 fallback failed: %v.", cerr)
-			tun.log.Traceln(string(output))
+			log.Errorf("SIOCSIFADDR_IN6 fallback failed: %v.", cerr)
+			log.Warnln(string(output))
 		}
 	}
 	return nil

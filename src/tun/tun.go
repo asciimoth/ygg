@@ -3,21 +3,16 @@ package tun
 import (
 	"fmt"
 	"io"
-	"net"
 	"sync"
 	"sync/atomic"
 
 	gtun "github.com/asciimoth/gonnect/tun"
 
-	"github.com/asciimoth/ygg/src/address"
-	"github.com/asciimoth/ygg/src/config"
 	"github.com/asciimoth/ygg/src/core"
 )
 
 type ReadWriteCloser interface {
 	io.ReadWriteCloser
-	Address() address.Address
-	Subnet() address.Subnet
 	MaxMTU() uint64
 	SetMTU(uint64)
 }
@@ -52,15 +47,11 @@ func (t AttachmentType) applyAttach(spec *attachSpec) {
 }
 
 type TunAdapter struct {
-	rwc    ReadWriteCloser
-	log    core.Logger
-	addr   address.Address
-	subnet address.Subnet
+	rwc ReadWriteCloser
+	log core.Logger
 
 	config struct {
-		fd   int32
-		name InterfaceName
-		mtu  InterfaceMTU
+		mtu InterfaceMTU
 	}
 
 	controlCh chan any
@@ -138,26 +129,13 @@ type supervisorState struct {
 	nextID  uint64
 }
 
+const defaultMTU uint64 = 65535
+
 func getSupportedMTU(mtu uint64) uint64 {
 	if mtu < 1280 {
 		return 1280
 	}
-	if mtu > MaximumMTU() {
-		return MaximumMTU()
-	}
 	return mtu
-}
-
-func DefaultName() string {
-	return config.GetDefaults().DefaultIfName
-}
-
-func DefaultMTU() uint64 {
-	return config.GetDefaults().DefaultIfMTU
-}
-
-func MaximumMTU() uint64 {
-	return config.GetDefaults().MaximumIfMTU
 }
 
 func New(rwc ReadWriteCloser, log core.Logger, opts ...SetupOption) (*TunAdapter, error) {
@@ -169,27 +147,14 @@ func New(rwc ReadWriteCloser, log core.Logger, opts ...SetupOption) (*TunAdapter
 		reportCh:  make(chan sessionReport, 64),
 		stopCh:    make(chan struct{}),
 	}
-	tun.config.name = InterfaceName(DefaultName())
-	tun.config.mtu = InterfaceMTU(DefaultMTU())
+	tun.config.mtu = InterfaceMTU(defaultMTU)
 	for _, opt := range opts {
 		tun._applyOption(opt)
 	}
-	tun.addr = tun.rwc.Address()
-	tun.subnet = tun.rwc.Subnet()
 	tun.started.Store(true)
 	go tun.supervisor()
 	go tun.queue()
-
-	if tun.config.name == "none" || tun.config.name == "dummy" {
-		tun.log.Debugln("Not attaching native TUN as ifname is none or dummy")
-		tun.rwc.SetMTU(tun.desiredMTU())
-		return tun, nil
-	}
-
-	if err := tun.attachNative(false); err != nil {
-		_ = tun.Stop()
-		return nil, err
-	}
+	tun.rwc.SetMTU(tun.desiredMTU())
 	return tun, nil
 }
 
@@ -260,46 +225,12 @@ func (tun *TunAdapter) MTU() uint64 {
 func (tun *TunAdapter) desiredMTU() uint64 {
 	mtu := uint64(tun.config.mtu)
 	if mtu == 0 {
-		mtu = DefaultMTU()
+		mtu = defaultMTU
 	}
 	if max := tun.rwc.MaxMTU(); max > 0 && max < mtu {
 		mtu = max
 	}
 	return getSupportedMTU(mtu)
-}
-
-func (tun *TunAdapter) buildTunAddress() string {
-	prefix := address.GetPrefix()
-	if !tun.addr.IsValid() {
-		return ""
-	}
-	return fmt.Sprintf("%s/%d", net.IP(tun.addr[:]).String(), 8*len(prefix[:])-1)
-}
-
-func (tun *TunAdapter) attachNative(replace bool) error {
-	addr := tun.buildTunAddress()
-	device, err := tun.createNativeTun(addr, tun.desiredMTU())
-	if err != nil {
-		return err
-	}
-	spec, err := tun.buildAttachSpec(device, AttachmentType("native"))
-	if err != nil {
-		_ = device.Close()
-		return err
-	}
-	if err := tun.submitAttach(spec, replace); err != nil {
-		_ = device.Close()
-		return err
-	}
-	if spec.mtu != tun.desiredMTU() {
-		tun.log.Warnf(
-			"Warning: Interface MTU %d automatically adjusted to %d (supported range is 1280-%d)",
-			tun.config.mtu,
-			spec.mtu,
-			MaximumMTU(),
-		)
-	}
-	return nil
 }
 
 func (tun *TunAdapter) submitAttach(spec *attachSpec, replace bool) error {

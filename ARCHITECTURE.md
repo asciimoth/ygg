@@ -14,7 +14,9 @@ At runtime, the system is composed as:
 4. `admin` exposes a local control API over TCP or UNIX sockets.
 5. `multicast` discovers local peers and feeds them back into `core`.
 6. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
-7. `tun` connects that IPv6 packet stream to the operating system TUN device.
+7. `tun` supervises a runtime attachment for that IPv6 packet stream.
+8. `tunnative` provides OS-specific native TUN creation/configuration for the
+   daemon.
 
 `cmd/yggdrasil` is the composition root. It wires the packages together but
 keeps most behavior inside `src/`.
@@ -38,7 +40,7 @@ Key outputs consumed by other packages:
 - `AllowedPublicKeys`, `NodeInfo`, `NodeInfoPrivacy`
 - `AdminListen`
 - `MulticastInterfaces`
-- `IfName`, `IfMTU`
+- `IfName`, `IfMTU` for daemon-owned native TUN setup
 
 This package is intentionally passive. It does not start services.
 
@@ -240,11 +242,12 @@ This package is the boundary between Yggdrasil's native address space
 ### `src/tun`
 
 Purpose:
-- Connect the IPv6 packet stream to an OS TUN interface.
+- Connect the IPv6 packet stream to an attached `gonnect/tun.Tun`
+  implementation.
 - Supervise a replaceable runtime attachment that implements
   `github.com/asciimoth/gonnect/tun.Tun`.
-- Handle platform-specific native TUN creation/configuration and allow
-  alternative implementations such as VTun in tests or embedded setups.
+- Remain generic so library consumers can choose how TUN devices are created
+  and attached.
 
 Main type:
 - `tun.TunAdapter`
@@ -254,8 +257,6 @@ Primary dependency:
 
 `tun.ReadWriteCloser` requires:
 - `io.ReadWriteCloser`
-- `Address() address.Address`
-- `Subnet() address.Subnet`
 - `MaxMTU() uint64`
 - `SetMTU(uint64)`
 
@@ -270,14 +271,30 @@ Behavior:
   without killing the adapter or `core`.
 - Updates the effective upstream MTU whenever a new attachment is installed or
   the active TUN reports an MTU change.
-- Can run detached with `ifname=none`, while still draining the upstream queue
-  so higher layers do not block.
+- Can run detached while still draining the upstream queue so higher layers do
+  not block.
 
 Runtime model:
 - `TunAdapter` owns the stable control plane and packet queue.
 - The active attachment owns device-specific packet I/O and event handling.
-- Native OS TUNs are created via `github.com/asciimoth/tuntap`.
 - The generic runtime boundary is `github.com/asciimoth/gonnect/tun.Tun`.
+
+### `tunnative`
+
+Purpose:
+- Create and configure native OS TUN devices in a platform-specific package at
+  the repository root.
+- Keep `src/` packages free of direct dependencies on `tuntap`, `netlink`,
+  platform ioctls, and OS-specific interface setup.
+
+Main API:
+- `tunnative.Create(log, tunnative.Config) (gonnect/tun.Tun, error)`
+
+Behavior:
+- Uses `github.com/asciimoth/tuntap` for native device creation.
+- Performs per-OS address, MTU, and link-up setup where needed.
+- Returns a generic `gonnect/tun.Tun` so callers can attach it through
+  `src/tun` without importing platform-specific details into library packages.
 
 ### `src/address`
 
@@ -300,6 +317,7 @@ The daemon is intentionally small. Its job is to:
 - instantiate `core`
 - attach `admin`
 - attach `multicast`
+- create native TUNs through `tunnative` when configured
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
 - manage shutdown ordering
 
@@ -332,6 +350,9 @@ options:
 - `multicast.SetupOption`
 - `tun.SetupOption`
 
+Platform-specific native TUN parameters from config are interpreted in
+`cmd/yggdrasil`, not inside `src/tun`.
+
 This keeps parsing concerns out of runtime packages.
 
 ### 2. Peer transport to routed overlay
@@ -363,6 +384,9 @@ details of `core`.
 Below that boundary, the active runtime attachment depends only on
 `gonnect/tun.Tun`, which is what allows native TUNs and VTun-backed
 implementations to share one lifecycle and packet path.
+
+In the default daemon, native attachments are created one layer above this via
+`tunnative.Create(...)` and then explicitly attached to `tun.TunAdapter`.
 
 ### 5. Local control API
 

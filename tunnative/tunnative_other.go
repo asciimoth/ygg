@@ -1,6 +1,6 @@
 //go:build !linux && !android && !darwin && !windows && !openbsd && !freebsd
 
-package tun
+package tunnative
 
 import (
 	"fmt"
@@ -9,13 +9,13 @@ import (
 	"github.com/asciimoth/tuntap"
 )
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	device, err := tuntap.CreateTUN(string(tun.config.name), int(mtu))
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	device, err := tuntap.CreateTUN(cfg.Name, int(cfg.MTU))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
-	if addr != "" {
-		tun.log.Warnln("Warning: Platform not supported, you must set the address of", mustName(device), "to", addr)
+	if cfg.Address != "" {
+		log.Warnln("Warning: Platform not supported, you must set the address of", mustName(device), "to", cfg.Address)
 	}
 	return device, nil
 }

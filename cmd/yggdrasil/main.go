@@ -29,14 +29,15 @@ import (
 
 	"github.com/asciimoth/ygg/src/core"
 	"github.com/asciimoth/ygg/src/multicast"
-	"github.com/asciimoth/ygg/src/tun"
+	yggtun "github.com/asciimoth/ygg/src/tun"
 	"github.com/asciimoth/ygg/src/version"
 	"github.com/asciimoth/ygg/transport"
+	"github.com/asciimoth/ygg/tunnative"
 )
 
 type node struct {
 	core      *core.Core
-	tun       *tun.TunAdapter
+	tun       *yggtun.TunAdapter
 	multicast *multicast.Multicast
 	admin     *admin.AdminSocket
 }
@@ -290,12 +291,28 @@ func main() {
 
 	// Set up the TUN module.
 	{
-		options := []tun.SetupOption{
-			tun.InterfaceName(cfg.IfName),
-			tun.InterfaceMTU(cfg.IfMTU),
+		options := []yggtun.SetupOption{
+			yggtun.InterfaceMTU(cfg.IfMTU),
 		}
-		if n.tun, err = tun.New(ipv6rwc.NewReadWriteCloser(n.core), logger, options...); err != nil {
+		if n.tun, err = yggtun.New(ipv6rwc.NewReadWriteCloser(n.core), logger, options...); err != nil {
 			panic(err)
+		}
+		if cfg.IfName != "none" && cfg.IfName != "dummy" {
+			device, err := tunnative.Create(logger, tunnative.Config{
+				Name:    cfg.IfName,
+				Address: buildTunAddress(n.core.Address()),
+				MTU:     cfg.IfMTU,
+			})
+			if err != nil {
+				panic(err)
+			}
+			if err := n.tun.Attach(device, yggtun.AttachmentType("native")); err != nil {
+				_ = device.Close()
+				panic(err)
+			}
+			if mtu, err := device.MTU(); err == nil && uint64(mtu) != n.tun.MTU() {
+				logger.Warnf("Warning: Interface MTU %d automatically adjusted to %d", cfg.IfMTU, mtu)
+			}
 		}
 		if n.admin != nil && n.tun != nil {
 			n.tun.SetupAdminHandlers(n.admin)
@@ -373,4 +390,9 @@ func setLogLevel(loglevel string, logger *log.Logger) {
 			break
 		}
 	}
+}
+
+func buildTunAddress(ip net.IP) string {
+	prefix := address.GetPrefix()
+	return fmt.Sprintf("%s/%d", ip.String(), 8*len(prefix[:])-1)
 }

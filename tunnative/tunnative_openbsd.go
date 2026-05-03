@@ -1,6 +1,6 @@
 //go:build openbsd
 
-package tun
+package tunnative
 
 import (
 	"fmt"
@@ -53,13 +53,13 @@ type in6AliasreqOpenBSD struct {
 	ifraLifetime   in6AddrlifetimeOpenBSD
 }
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	device, err := tuntap.CreateTUN(string(tun.config.name), int(mtu))
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	device, err := tuntap.CreateTUN(cfg.Name, int(cfg.MTU))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
-	if addr != "" {
-		if err := tun.configureAddress(device, addr); err != nil {
+	if cfg.Address != "" {
+		if err := configureAddress(log, device, cfg.Address); err != nil {
 			_ = device.Close()
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 	return device, nil
 }
 
-func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
+func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	name, err := device.Name()
 	if err != nil {
 		return err
@@ -78,19 +78,19 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
 	}
 	ip, prefix, err := net.ParseCIDR(addr)
 	if err != nil {
-		tun.log.Errorf("Error in ParseCIDR: %v", err)
+		log.Errorf("Error in ParseCIDR: %v", err)
 		return err
 	}
 	sfd, err := unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		tun.log.Printf("Create AF_INET6 socket failed: %v", err)
+		log.Printf("Create AF_INET6 socket failed: %v", err)
 		return err
 	}
 	defer unix.Close(sfd)
 
-	tun.log.Infof("Interface name: %s", name)
-	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", mtu)
+	log.Infof("Interface name: %s", name)
+	log.Infof("Interface IPv6: %s", addr)
+	log.Infof("Interface MTU: %d", mtu)
 
 	var ar in6AliasreqOpenBSD
 	copy(ar.ifraName[:], name)
@@ -101,7 +101,7 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
 	ar.ifraLifetime.ia6tPltime = nd6InfiniteLifetime
 
 	if err = unix.IoctlSetInt(sfd, siocAIFAddrIN6, int(uintptr(unsafe.Pointer(&ar)))); err != nil {
-		tun.log.Errorf("Error in SIOCAIFADDR_IN6: %v", err)
+		log.Errorf("Error in SIOCAIFADDR_IN6: %v", err)
 		return err
 	}
 	return nil

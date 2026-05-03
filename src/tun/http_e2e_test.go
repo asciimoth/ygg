@@ -194,7 +194,7 @@ func newHTTPTestNode(t *testing.T, node *core.Core, name string, mtu, mwo, mro i
 	t.Helper()
 
 	rwc := ipv6rwc.NewReadWriteCloser(node)
-	adapter, err := New(rwc, testLogger{}, InterfaceName("none"), InterfaceMTU(uint64(mtu)))
+	adapter, err := New(rwc, testLogger{}, InterfaceMTU(uint64(mtu)))
 	if err != nil {
 		t.Fatalf("new tun adapter %s: %v", name, err)
 	}

@@ -1,6 +1,6 @@
 //go:build windows
 
-package tun
+package tunnative
 
 import (
 	"errors"
@@ -11,20 +11,19 @@ import (
 
 	gtun "github.com/asciimoth/gonnect/tun"
 	"github.com/asciimoth/tuntap"
-	"github.com/asciimoth/ygg/src/config"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	if tun.config.fd > 0 {
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	if cfg.FD > 0 {
 		return nil, fmt.Errorf("setup via FD not supported on this platform")
 	}
-	ifname := string(tun.config.name)
+	ifname := cfg.Name
 	if ifname == "auto" {
-		ifname = config.GetDefaults().DefaultIfName
+		ifname = "Yggdrasil"
 	}
 	var device gtun.Tun
 	err := elevate.DoAsSystem(func() error {
@@ -34,31 +33,31 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 			return err
 		}
 		tuntap.WintunStaticRequestedGUID = &guid
-		device, err = tuntap.CreateTUN(ifname, int(mtu))
+		device, err = tuntap.CreateTUN(ifname, int(cfg.MTU))
 		if err != nil {
-			tun.log.Printf("Error creating TUN: '%s'", err)
+			log.Printf("Error creating TUN: '%s'", err)
 			wintun.Uninstall()
 			time.Sleep(3 * time.Second)
-			tun.log.Printf("Trying again")
-			device, err = tuntap.CreateTUN(ifname, int(mtu))
+			log.Printf("Trying again")
+			device, err = tuntap.CreateTUN(ifname, int(cfg.MTU))
 			if err != nil {
 				return err
 			}
 		}
-		tun.log.Printf("Waiting for TUN to come up")
+		log.Printf("Waiting for TUN to come up")
 		time.Sleep(time.Second)
-		if addr != "" {
-			tun.log.Printf("Setting up address")
-			if err = tun.configureAddress(device, addr); err != nil {
-				tun.log.Errorln("Failed to set up TUN address:", err)
+		if cfg.Address != "" {
+			log.Printf("Setting up address")
+			if err = configureAddress(log, device, cfg.Address); err != nil {
+				log.Errorln("Failed to set up TUN address:", err)
 				return err
 			}
 		}
-		if err = tun.configureMTU(device, getSupportedMTU(mtu)); err != nil {
-			tun.log.Errorln("Failed to set up TUN MTU:", err)
+		if err = configureMTU(log, device, cfg.MTU); err != nil {
+			log.Errorln("Failed to set up TUN MTU:", err)
 			return err
 		}
-		tun.log.Printf("TUN is set up successfully")
+		log.Printf("TUN is set up successfully")
 		return nil
 	})
 	if err != nil {
@@ -67,7 +66,7 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 	return device, nil
 }
 
-func (tun *TunAdapter) configureMTU(device gtun.Tun, mtu uint64) error {
+func configureMTU(log Logger, device gtun.Tun, mtu uint64) error {
 	name, err := device.Name()
 	if err != nil || name == "" {
 		return errors.New("can't configure MTU as TUN adapter is not present")
@@ -92,7 +91,7 @@ func (tun *TunAdapter) configureMTU(device gtun.Tun, mtu uint64) error {
 	return ipfamily.Set()
 }
 
-func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
+func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	name, err := device.Name()
 	if err != nil || name == "" {
 		return errors.New("can't configure IPv6 address as TUN adapter is not present")

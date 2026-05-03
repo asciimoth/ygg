@@ -1,6 +1,6 @@
 //go:build darwin || ios
 
-package tun
+package tunnative
 
 import (
 	"encoding/binary"
@@ -15,8 +15,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
-	ifname := string(tun.config.name)
+func create(log Logger, cfg Config) (gtun.Tun, error) {
+	ifname := cfg.Name
 	if ifname == "auto" {
 		ifname = "utun"
 	}
@@ -24,8 +24,8 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 		device gtun.Tun
 		err    error
 	)
-	if tun.config.fd > 0 {
-		dfd, derr := unix.Dup(int(tun.config.fd))
+	if cfg.FD > 0 {
+		dfd, derr := unix.Dup(int(cfg.FD))
 		if derr != nil {
 			return nil, fmt.Errorf("failed to duplicate FD: %w", derr)
 		}
@@ -33,15 +33,15 @@ func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error
 			unix.Close(dfd)
 			return nil, fmt.Errorf("failed to set FD as non-blocking: %w", err)
 		}
-		device, err = tuntap.CreateTUNFromFile(os.NewFile(uintptr(dfd), "/dev/tun"), int(mtu))
+		device, err = tuntap.CreateTUNFromFile(os.NewFile(uintptr(dfd), "/dev/tun"), int(cfg.MTU))
 	} else {
-		device, err = tuntap.CreateTUN(ifname, int(mtu))
+		device, err = tuntap.CreateTUN(ifname, int(cfg.MTU))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
-	if addr != "" {
-		if err := tun.configureAddress(device, addr); err != nil {
+	if cfg.Address != "" {
+		if err := configureAddress(log, device, cfg.Address); err != nil {
 			_ = device.Close()
 			return nil, err
 		}
@@ -86,7 +86,7 @@ type ifreqDarwin struct {
 	ifruMTU uint32
 }
 
-func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
+func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	name, err := device.Name()
 	if err != nil {
 		return fmt.Errorf("failed to read TUN name: %w", err)
@@ -97,7 +97,7 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
 	}
 	fd, err := unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		tun.log.Errorf("Create AF_SYSTEM socket failed: %v.", err)
+		log.Errorf("Create AF_SYSTEM socket failed: %v.", err)
 		return fmt.Errorf("failed to open AF_SYSTEM: %w", err)
 	}
 	defer unix.Close(fd)
@@ -129,16 +129,16 @@ func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
 	copy(ir.ifrName[:], name)
 	ir.ifruMTU = uint32(mtu)
 
-	tun.log.Infof("Interface name: %s", name)
-	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", ir.ifruMTU)
+	log.Infof("Interface name: %s", name)
+	log.Infof("Interface IPv6: %s", addr)
+	log.Infof("Interface MTU: %d", ir.ifruMTU)
 
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(darwinSIOCAIFADDRIN6), uintptr(unsafe.Pointer(&ar))); errno != 0 {
-		tun.log.Errorf("Error in darwin_SIOCAIFADDR_IN6: %v", errno)
+		log.Errorf("Error in darwin_SIOCAIFADDR_IN6: %v", errno)
 		return fmt.Errorf("failed to call SIOCAIFADDR_IN6: %w", errno)
 	}
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSIFMTU), uintptr(unsafe.Pointer(&ir))); errno != 0 {
-		tun.log.Errorf("Error in SIOCSIFMTU: %v", errno)
+		log.Errorf("Error in SIOCSIFMTU: %v", errno)
 		return fmt.Errorf("failed to call SIOCSIFMTU: %w", errno)
 	}
 	return nil
