@@ -18,8 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
+	"github.com/asciimoth/gonnect/loopback"
 	"github.com/asciimoth/gonnect/native"
 
 	"github.com/asciimoth/ygg/src/config"
@@ -36,33 +38,37 @@ type httpTestNode struct {
 }
 
 func TestVTunHTTPPairSwap(t *testing.T) {
-	nodeA, nodeB := createConnectedHTTPTestCores(t)
+	for _, networkMode := range []string{"native", "loopback"} {
+		t.Run(networkMode, func(t *testing.T) {
+			nodeA, nodeB := createConnectedHTTPTestCores(t, networkMode)
 
-	left := newHTTPTestNode(t, nodeA, "vtun-a-1", 1500, 0, 0)
-	right := newHTTPTestNode(t, nodeB, "vtun-b-1", 1480, 4, 2)
+			left := newHTTPTestNode(t, nodeA, "vtun-a-1", 1500, 0, 0)
+			right := newHTTPTestNode(t, nodeB, "vtun-b-1", 1480, 4, 2)
 
-	assertTunStatus(t, left.adapter, "vtun-a-1", 1500, 0, 0)
-	assertTunStatus(t, right.adapter, "vtun-b-1", 1480, 2, 4)
-	exerciseHTTPOverVTun(t, left.vt, right.vt, nodeA.Address(), "phase-1")
+			assertTunStatus(t, left.adapter, "vtun-a-1", 1500, 0, 0)
+			assertTunStatus(t, right.adapter, "vtun-b-1", 1480, 2, 4)
+			exerciseHTTPOverVTun(t, left.vt, right.vt, nodeA.Address(), "phase-1")
 
-	nextLeft := buildTestVTun(t, nodeA.Address(), "vtun-a-2", 1360, 12, 8)
-	nextRight := buildTestVTun(t, nodeB.Address(), "vtun-b-2", 1420, 6, 10)
-	if err := left.adapter.Replace(nextLeft, AttachmentType("vtun")); err != nil {
-		t.Fatalf("replace left vtun: %v", err)
+			nextLeft := buildTestVTun(t, nodeA.Address(), "vtun-a-2", 1360, 12, 8)
+			nextRight := buildTestVTun(t, nodeB.Address(), "vtun-b-2", 1420, 6, 10)
+			if err := left.adapter.Replace(nextLeft, AttachmentType("vtun")); err != nil {
+				t.Fatalf("replace left vtun: %v", err)
+			}
+			if err := right.adapter.Replace(nextRight, AttachmentType("vtun")); err != nil {
+				t.Fatalf("replace right vtun: %v", err)
+			}
+			left.vt = nextLeft
+			right.vt = nextRight
+
+			assertTunStatus(t, left.adapter, "vtun-a-2", 1360, 8, 12)
+			assertTunStatus(t, right.adapter, "vtun-b-2", 1420, 10, 6)
+			exerciseHTTPOverVTun(t, left.vt, right.vt, nodeA.Address(), "phase-2")
+		})
 	}
-	if err := right.adapter.Replace(nextRight, AttachmentType("vtun")); err != nil {
-		t.Fatalf("replace right vtun: %v", err)
-	}
-	left.vt = nextLeft
-	right.vt = nextRight
-
-	assertTunStatus(t, left.adapter, "vtun-a-2", 1360, 8, 12)
-	assertTunStatus(t, right.adapter, "vtun-b-2", 1420, 10, 6)
-	exerciseHTTPOverVTun(t, left.vt, right.vt, nodeA.Address(), "phase-2")
 }
 
 func TestVTunTCPPingPongSwap(t *testing.T) {
-	nodeA, nodeB := createConnectedHTTPTestCores(t)
+	nodeA, nodeB := createConnectedHTTPTestCores(t, "native")
 
 	left := newHTTPTestNode(t, nodeA, "vtun-a-1", 1500, 0, 0)
 	right := newHTTPTestNode(t, nodeB, "vtun-b-1", 1480, 4, 2)
@@ -88,7 +94,7 @@ func TestVTunTCPPingPongSwap(t *testing.T) {
 }
 
 func TestVTunUDPPingPongSwap(t *testing.T) {
-	nodeA, nodeB := createConnectedHTTPTestCores(t)
+	nodeA, nodeB := createConnectedHTTPTestCores(t, "native")
 
 	left := newHTTPTestNode(t, nodeA, "vtun-a-1", 1500, 0, 0)
 	right := newHTTPTestNode(t, nodeB, "vtun-b-1", 1480, 4, 2)
@@ -113,7 +119,12 @@ func TestVTunUDPPingPongSwap(t *testing.T) {
 	exerciseUDPPingPongOverVTun(t, left.vt, right.vt, nodeA.Address(), "udp-phase-2")
 }
 
-func createConnectedHTTPTestCores(t *testing.T) (*core.Core, *core.Core) {
+type httpTestTransportNetwork interface {
+	transport.Network
+	gonnect.UpDown
+}
+
+func createConnectedHTTPTestCores(t *testing.T, networkMode string) (*core.Core, *core.Core) {
 	t.Helper()
 
 	cfgA := config.GenerateConfig()
@@ -125,11 +136,13 @@ func createConnectedHTTPTestCores(t *testing.T) (*core.Core, *core.Core) {
 		t.Fatalf("generate cert B: %v", err)
 	}
 
+	nodeANetwork, nodeBNetwork := newHTTPTestTransportNetworks(t, networkMode)
+
 	logger := testLogger{}
 	nodeA, err := core.New(
 		cfgA.Certificate,
 		logger,
-		core.TransportManager{Manager: newHTTPTestTransportManager(t, cfgA.Certificate)},
+		core.TransportManager{Manager: newHTTPTestTransportManager(t, nodeANetwork, cfgA.Certificate)},
 	)
 	if err != nil {
 		t.Fatalf("new core A: %v", err)
@@ -139,7 +152,7 @@ func createConnectedHTTPTestCores(t *testing.T) (*core.Core, *core.Core) {
 	nodeB, err := core.New(
 		cfgB.Certificate,
 		logger,
-		core.TransportManager{Manager: newHTTPTestTransportManager(t, cfgB.Certificate)},
+		core.TransportManager{Manager: newHTTPTestTransportManager(t, nodeBNetwork, cfgB.Certificate)},
 	)
 	if err != nil {
 		t.Fatalf("new core B: %v", err)
@@ -168,13 +181,42 @@ func createConnectedHTTPTestCores(t *testing.T) (*core.Core, *core.Core) {
 	return nodeA, nodeB
 }
 
-func newHTTPTestTransportManager(t *testing.T, cert *tls.Certificate) *transport.Manager {
+func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTransportNetwork, httpTestTransportNetwork) {
 	t.Helper()
 
-	network := &native.Network{}
-	if err := network.Up(); err != nil {
-		t.Fatalf("network up: %v", err)
+	switch networkMode {
+	case "native":
+		left := &native.Network{}
+		if err := left.Up(); err != nil {
+			t.Fatalf("network up left: %v", err)
+		}
+		right := &native.Network{}
+		if err := right.Up(); err != nil {
+			_ = left.Down()
+			t.Fatalf("network up right: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = right.Down()
+			_ = left.Down()
+		})
+		return left, right
+	case "loopback":
+		shared := loopback.NewLoopbackNetwok()
+		if err := shared.Up(); err != nil {
+			t.Fatalf("network up: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = shared.Down()
+		})
+		return shared, shared
+	default:
+		t.Fatalf("unknown network mode %q", networkMode)
+		return nil, nil
 	}
+}
+
+func newHTTPTestTransportManager(t *testing.T, network transport.Network, cert *tls.Certificate) *transport.Manager {
+	t.Helper()
 
 	manager := transport.NewManager(network)
 	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {

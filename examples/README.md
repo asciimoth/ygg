@@ -11,3 +11,10 @@ Run it with:
 ```sh
 go run ./examples/http_example
 ```
+
+Select the transport network with `-transport-network`:
+
+```sh
+go run ./examples/http_example -transport-network=native
+go run ./examples/http_example -transport-network=loopback
+```

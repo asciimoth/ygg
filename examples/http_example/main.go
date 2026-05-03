@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -16,8 +17,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
+	"github.com/asciimoth/gonnect/loopback"
 	"github.com/asciimoth/gonnect/native"
 	gologme "github.com/gologme/log"
 
@@ -36,8 +39,10 @@ const (
 
 func main() {
 	logger := log.New(os.Stdout, "http_example: ", 0)
+	transportNetwork := flag.String("transport-network", "native", "transport network: native or loopback")
+	flag.Parse()
 
-	pair, err := newPair()
+	pair, err := newPair(*transportNetwork)
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -49,6 +54,7 @@ func main() {
 
 	logger.Printf("node A address: %s", pair.left.core.Address())
 	logger.Printf("node B address: %s", pair.right.core.Address())
+	logger.Printf("transport network: %s", pair.transportMode)
 
 	target, shutdownServer, err := startHTTPServer(pair.left.vt, pair.left.core.Address())
 	if err != nil {
@@ -67,23 +73,45 @@ func main() {
 }
 
 type pair struct {
-	left  *node
-	right *node
+	left          *node
+	right         *node
+	transportMode string
 }
 
-func newPair() (*pair, error) {
-	left, err := newNode("node-a")
+type transportExampleNetwork interface {
+	transport.Network
+	gonnect.UpDown
+}
+
+func newPair(transportMode string) (*pair, error) {
+	leftNetwork, rightNetwork, cleanupNetworks, err := newTransportNetworks(transportMode)
 	if err != nil {
+		return nil, err
+	}
+
+	left, err := newNode("node-a", leftNetwork, cleanupNetworks == nil)
+	if err != nil {
+		if cleanupNetworks != nil {
+			_ = cleanupNetworks()
+		}
 		return nil, fmt.Errorf("create node A: %w", err)
 	}
 
-	right, err := newNode("node-b")
+	right, err := newNode("node-b", rightNetwork, cleanupNetworks == nil)
 	if err != nil {
 		_ = left.Close()
+		if cleanupNetworks != nil {
+			_ = cleanupNetworks()
+		}
 		return nil, fmt.Errorf("create node B: %w", err)
 	}
 
-	pair := &pair{left: left, right: right}
+	pair := &pair{left: left, right: right, transportMode: transportMode}
+	if cleanupNetworks != nil {
+		pair.left.networkOwner = nil
+		pair.right.networkOwner = nil
+		pair.left.extraCleanup = cleanupNetworks
+	}
 	if err := pair.connect(); err != nil {
 		_ = pair.Close()
 		return nil, err
@@ -135,27 +163,49 @@ func (p *pair) Close() error {
 }
 
 type node struct {
-	core    *core.Core
-	network *native.Network
-	rwc     *ipv6rwc.ReadWriteCloser
-	adapter *yggtun.TunAdapter
-	vt      *vtun.VTun
+	core         *core.Core
+	networkOwner gonnect.UpDown
+	extraCleanup func() error
+	rwc          *ipv6rwc.ReadWriteCloser
+	adapter      *yggtun.TunAdapter
+	vt           *vtun.VTun
 }
 
-func newNode(name string) (*node, error) {
+func newTransportNetworks(mode string) (transportExampleNetwork, transportExampleNetwork, func() error, error) {
+	switch mode {
+	case "native":
+		left := &native.Network{}
+		if err := left.Up(); err != nil {
+			return nil, nil, nil, fmt.Errorf("bring left transport network up: %w", err)
+		}
+		right := &native.Network{}
+		if err := right.Up(); err != nil {
+			_ = left.Down()
+			return nil, nil, nil, fmt.Errorf("bring right transport network up: %w", err)
+		}
+		return left, right, nil, nil
+	case "loopback":
+		shared := loopback.NewLoopbackNetwok()
+		if err := shared.Up(); err != nil {
+			return nil, nil, nil, fmt.Errorf("bring shared transport network up: %w", err)
+		}
+		return shared, shared, shared.Down, nil
+	default:
+		return nil, nil, nil, fmt.Errorf("unsupported transport network %q", mode)
+	}
+}
+
+func newNode(name string, network transportExampleNetwork, ownsNetwork bool) (*node, error) {
 	cfg := config.GenerateConfig()
 	if err := cfg.GenerateSelfSignedCertificate(); err != nil {
 		return nil, fmt.Errorf("generate certificate: %w", err)
 	}
 
-	network := &native.Network{}
-	if err := network.Up(); err != nil {
-		return nil, fmt.Errorf("bring transport network up: %w", err)
-	}
-
 	manager, err := newTransportManager(network, cfg.Certificate)
 	if err != nil {
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, err
 	}
 
@@ -166,7 +216,9 @@ func newNode(name string) (*node, error) {
 		core.TransportManager{Manager: manager},
 	)
 	if err != nil {
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, fmt.Errorf("create core: %w", err)
 	}
 
@@ -175,7 +227,9 @@ func newNode(name string) (*node, error) {
 	if err != nil {
 		coreNode.Stop()
 		_ = rwc.Close()
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, fmt.Errorf("create tun adapter: %w", err)
 	}
 
@@ -184,7 +238,9 @@ func newNode(name string) (*node, error) {
 		_ = adapter.Stop()
 		_ = rwc.Close()
 		coreNode.Stop()
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, err
 	}
 
@@ -193,7 +249,9 @@ func newNode(name string) (*node, error) {
 		_ = adapter.Stop()
 		_ = rwc.Close()
 		coreNode.Stop()
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, fmt.Errorf("attach vtun: %w", err)
 	}
 
@@ -208,16 +266,22 @@ func newNode(name string) (*node, error) {
 		_ = adapter.Stop()
 		_ = rwc.Close()
 		coreNode.Stop()
-		_ = network.Down()
+		if ownsNetwork {
+			_ = network.Down()
+		}
 		return nil, fmt.Errorf("wait for vtun attachment: %w", err)
 	}
 
+	var networkOwner gonnect.UpDown
+	if ownsNetwork {
+		networkOwner = network
+	}
 	return &node{
-		core:    coreNode,
-		network: network,
-		rwc:     rwc,
-		adapter: adapter,
-		vt:      vt,
+		core:         coreNode,
+		networkOwner: networkOwner,
+		rwc:          rwc,
+		adapter:      adapter,
+		vt:           vt,
 	}, nil
 }
 
@@ -237,8 +301,13 @@ func (n *node) Close() error {
 	if n.core != nil {
 		n.core.Stop()
 	}
-	if n.network != nil {
-		if err := n.network.Down(); err != nil && firstErr == nil {
+	if n.networkOwner != nil {
+		if err := n.networkOwner.Down(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if n.extraCleanup != nil {
+		if err := n.extraCleanup(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -246,7 +315,7 @@ func (n *node) Close() error {
 	return firstErr
 }
 
-func newTransportManager(network *native.Network, cert *tls.Certificate) (*transport.Manager, error) {
+func newTransportManager(network transport.Network, cert *tls.Certificate) (*transport.Manager, error) {
 	manager := transport.NewManager(network)
 	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
 		return nil, fmt.Errorf("register tcp transport: %w", err)
