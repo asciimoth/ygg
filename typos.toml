@@ -1,0 +1,11 @@
+[default.extend-words]
+snet = "snet"
+nd = "nd"
+sice = "sice"
+
+# legacy typos
+hander= "hander" # ./src/ipv6rwc/ipv6rwc.go:63:42
+
+[files]
+extend-exclude = ["*_test.go"]
+
