@@ -15,14 +15,14 @@ import (
 
 	"suah.dev/protect"
 
-	"github.com/olekukonko/tablewriter"
-	"github.com/olekukonko/tablewriter/renderer"
-	"github.com/olekukonko/tablewriter/tw"
 	"github.com/asciimoth/ygg/src/admin"
 	"github.com/asciimoth/ygg/src/core"
 	"github.com/asciimoth/ygg/src/multicast"
 	"github.com/asciimoth/ygg/src/tun"
 	"github.com/asciimoth/ygg/src/version"
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
 )
 
 func main() {
@@ -325,9 +325,14 @@ func run() int {
 			panic(err)
 		}
 		_ = table.Append([]string{"TUN enabled:", fmt.Sprintf("%#v", resp.Enabled)})
-		if resp.Enabled {
+		_ = table.Append([]string{"TUN state:", string(resp.State)})
+		_ = table.Append([]string{"TUN attached:", fmt.Sprintf("%#v", resp.Attached)})
+		if resp.Attached {
+			_ = table.Append([]string{"Attachment type:", resp.Type})
 			_ = table.Append([]string{"Interface name:", resp.Name})
 			_ = table.Append([]string{"Interface MTU:", fmt.Sprintf("%d", resp.MTU)})
+			_ = table.Append([]string{"Interface MRO:", fmt.Sprintf("%d", resp.MRO)})
+			_ = table.Append([]string{"Interface MWO:", fmt.Sprintf("%d", resp.MWO)})
 		}
 		_ = table.Render()
 

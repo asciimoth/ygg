@@ -6,6 +6,8 @@ require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
 	github.com/asciimoth/gonnect v0.11.0
+	github.com/asciimoth/gonnect-netstack v0.3.14
+	github.com/asciimoth/tuntap v0.3.0
 	github.com/gologme/log v1.3.0
 	github.com/hashicorp/go-syslog v1.0.0
 	github.com/hjson/hjson-go/v4 v4.6.0
@@ -17,7 +19,6 @@ require (
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.34.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
-	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/windows v0.5.3
 )
 
@@ -28,10 +29,14 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/google/btree v1.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.2.0 // indirect
 	github.com/olekukonko/ll v0.1.6 // indirect
+	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
+	golang.org/x/time v0.12.0 // indirect
+	gvisor.dev/gvisor v0.0.0-20260325202830-7644cf3a343c // indirect
 )
 
 require (

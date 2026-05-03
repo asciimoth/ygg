@@ -241,7 +241,10 @@ This package is the boundary between Yggdrasil's native address space
 
 Purpose:
 - Connect the IPv6 packet stream to an OS TUN interface.
-- Handle platform-specific TUN creation and configuration.
+- Supervise a replaceable runtime attachment that implements
+  `github.com/asciimoth/gonnect/tun.Tun`.
+- Handle platform-specific native TUN creation/configuration and allow
+  alternative implementations such as VTun in tests or embedded setups.
 
 Main type:
 - `tun.TunAdapter`
@@ -260,10 +263,21 @@ In the default daemon wiring, `ipv6rwc.ReadWriteCloser` implements this
 contract.
 
 Behavior:
-- Creates or adopts a TUN device.
-- Reads packets from the kernel and writes them into the provided packet stream.
-- Reads packets from the packet stream and writes them to the kernel.
-- Can run disabled with `ifname=none`, while still draining the upstream queue.
+- Starts as a long-lived supervisor and keeps one upstream queue reader alive
+  for the lifetime of the adapter.
+- Can attach, detach, and replace the active TUN implementation at runtime.
+- Runs attachment-local read/write/event loops so an old TUN can stop or close
+  without killing the adapter or `core`.
+- Updates the effective upstream MTU whenever a new attachment is installed or
+  the active TUN reports an MTU change.
+- Can run detached with `ifname=none`, while still draining the upstream queue
+  so higher layers do not block.
+
+Runtime model:
+- `TunAdapter` owns the stable control plane and packet queue.
+- The active attachment owns device-specific packet I/O and event handling.
+- Native OS TUNs are created via `github.com/asciimoth/tuntap`.
+- The generic runtime boundary is `github.com/asciimoth/gonnect/tun.Tun`.
 
 ### `src/address`
 
@@ -340,11 +354,15 @@ main seam between transport-specific code and overlay routing.
 
 `ipv6rwc` consumes this API and translates it into IPv6 packet semantics.
 
-### 4. IPv6 adaptation to OS networking
+### 4. IPv6 adaptation to attachable networking
 
 `tun.TunAdapter` depends only on the `tun.ReadWriteCloser` interface. This is
 the key decoupling point that allows TUN handling to stay independent from the
 details of `core`.
+
+Below that boundary, the active runtime attachment depends only on
+`gonnect/tun.Tun`, which is what allows native TUNs and VTun-backed
+implementations to share one lifecycle and packet path.
 
 ### 5. Local control API
 
@@ -365,8 +383,9 @@ This keeps admin transport centralized while leaving business logic distributed.
 
 For local application traffic:
 
-1. The kernel writes an IPv6 packet to the TUN device.
-2. `tun` reads the packet and writes it to `ipv6rwc`.
+1. The active TUN attachment reads an IPv6 packet from the kernel or virtual
+   implementation.
+2. `tun` forwards the packet to `ipv6rwc`.
 3. `ipv6rwc` validates source/destination addressing and resolves the remote
    public key from the destination address or subnet.
 4. `core` writes the payload into the Ironwood encrypted routed overlay.
@@ -377,7 +396,11 @@ For inbound traffic:
 1. `core` receives an encrypted routed packet from Ironwood.
 2. `core.ReadFrom` filters for session traffic.
 3. `ipv6rwc` validates the IPv6 payload and source mapping.
-4. `tun` writes the IPv6 packet into the OS TUN device.
+4. `tun` queues the IPv6 packet for the current attachment.
+5. The active attachment writes the packet into the OS or virtual TUN.
+
+If no attachment is active, `tun` continues draining upstream packets and drops
+them rather than deadlocking `core`.
 
 ### Control-plane flow
 
@@ -403,14 +426,16 @@ serialized state mutation:
 - `core.links`
 - `core.protoHandler`
 - `multicast.Multicast`
-- `tun.TunAdapter` partially
 
 Implications:
 - mutable package state is often owned by one actor
 - public methods frequently use `phony.Block` for synchronized access
 - background goroutines are used for I/O loops, timers, retries, and listeners
 
-When refactoring, preserving actor ownership boundaries is more important than
+`tun.TunAdapter` no longer embeds `phony.Inbox`. Its state is instead owned by a
+dedicated supervisor goroutine with control, packet, and event channels.
+
+When refactoring, preserving these ownership boundaries is more important than
 preserving file layout.
 
 ## Trust and Policy Boundaries

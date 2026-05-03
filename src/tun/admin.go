@@ -8,9 +8,14 @@ import (
 
 type GetTUNRequest struct{}
 type GetTUNResponse struct {
-	Enabled bool   `json:"enabled"`
-	Name    string `json:"name,omitempty"`
-	MTU     uint64 `json:"mtu,omitempty"`
+	Enabled  bool   `json:"enabled"`
+	Attached bool   `json:"attached"`
+	State    State  `json:"state"`
+	Type     string `json:"type,omitempty"`
+	Name     string `json:"name,omitempty"`
+	MTU      uint64 `json:"mtu,omitempty"`
+	MRO      int    `json:"mro,omitempty"`
+	MWO      int    `json:"mwo,omitempty"`
 }
 
 type TUNEntry struct {
@@ -18,12 +23,15 @@ type TUNEntry struct {
 }
 
 func (t *TunAdapter) getTUNHandler(req *GetTUNRequest, res *GetTUNResponse) error {
-	res.Enabled = t.isEnabled
-	if !t.isEnabled {
-		return nil
-	}
-	res.Name = t.Name()
-	res.MTU = t.MTU()
+	status := t.Status()
+	res.Enabled = status.Enabled
+	res.Attached = status.Attached
+	res.State = status.State
+	res.Type = status.Type
+	res.Name = status.Name
+	res.MTU = status.MTU
+	res.MRO = status.MRO
+	res.MWO = status.MWO
 	return nil
 }
 

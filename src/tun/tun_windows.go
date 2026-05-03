@@ -9,126 +9,112 @@ import (
 	"net/netip"
 	"time"
 
+	gtun "github.com/asciimoth/gonnect/tun"
+	"github.com/asciimoth/tuntap"
 	"github.com/asciimoth/ygg/src/config"
 	"golang.org/x/sys/windows"
-
 	"golang.zx2c4.com/wintun"
-	wgtun "golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/elevate"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
-// This is to catch Windows platforms
-
-// Configures the TUN adapter with the correct IPv6 address and MTU.
-func (tun *TunAdapter) setup(ifname string, addr string, mtu uint64) error {
+func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
+	if tun.config.fd > 0 {
+		return nil, fmt.Errorf("setup via FD not supported on this platform")
+	}
+	ifname := string(tun.config.name)
 	if ifname == "auto" {
 		ifname = config.GetDefaults().DefaultIfName
 	}
-	return elevate.DoAsSystem(func() error {
+	var device gtun.Tun
+	err := elevate.DoAsSystem(func() error {
 		var err error
-		var iface wgtun.Device
 		var guid windows.GUID
 		if guid, err = windows.GUIDFromString("{8f59971a-7872-4aa6-b2eb-061fc4e9d0a7}"); err != nil {
 			return err
 		}
-		iface, err = wgtun.CreateTUNWithRequestedGUID(ifname, &guid, int(mtu))
+		tuntap.WintunStaticRequestedGUID = &guid
+		device, err = tuntap.CreateTUN(ifname, int(mtu))
 		if err != nil {
-			// Very rare condition, it will purge the old device and create new
 			tun.log.Printf("Error creating TUN: '%s'", err)
 			wintun.Uninstall()
 			time.Sleep(3 * time.Second)
 			tun.log.Printf("Trying again")
-			iface, err = wgtun.CreateTUNWithRequestedGUID(ifname, &guid, int(mtu))
+			device, err = tuntap.CreateTUN(ifname, int(mtu))
 			if err != nil {
 				return err
 			}
 		}
 		tun.log.Printf("Waiting for TUN to come up")
-		time.Sleep(1 * time.Second)
-		tun.iface = iface
+		time.Sleep(time.Second)
 		if addr != "" {
 			tun.log.Printf("Setting up address")
-			if err = tun.setupAddress(addr); err != nil {
+			if err = tun.configureAddress(device, addr); err != nil {
 				tun.log.Errorln("Failed to set up TUN address:", err)
 				return err
 			}
 		}
-		if err = tun.setupMTU(getSupportedMTU(mtu)); err != nil {
+		if err = tun.configureMTU(device, getSupportedMTU(mtu)); err != nil {
 			tun.log.Errorln("Failed to set up TUN MTU:", err)
 			return err
-		}
-		if mtu, err := iface.MTU(); err == nil {
-			tun.mtu = uint64(mtu)
 		}
 		tun.log.Printf("TUN is set up successfully")
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return device, nil
 }
 
-// Configures the "utun" adapter from an existing file descriptor.
-func (tun *TunAdapter) setupFD(fd int32, addr string, mtu uint64) error {
-	return fmt.Errorf("setup via FD not supported on this platform")
-}
-
-// Sets the MTU of the TUN adapter.
-func (tun *TunAdapter) setupMTU(mtu uint64) error {
-	if tun.iface == nil || tun.Name() == "" {
-		return errors.New("Can't configure MTU as TUN adapter is not present")
+func (tun *TunAdapter) configureMTU(device gtun.Tun, mtu uint64) error {
+	name, err := device.Name()
+	if err != nil || name == "" {
+		return errors.New("can't configure MTU as TUN adapter is not present")
 	}
-	if intf, ok := tun.iface.(*wgtun.NativeTun); ok {
-		luid := winipcfg.LUID(intf.LUID())
-		ipfamily, err := luid.IPInterface(windows.AF_INET6)
-		if err != nil {
-			return err
-		}
-
-		ipfamily.NLMTU = uint32(mtu)
-		intf.ForceMTU(int(ipfamily.NLMTU))
-		ipfamily.UseAutomaticMetric = false
-		ipfamily.Metric = 0
-		ipfamily.DadTransmits = 0
-		ipfamily.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
-
-		if err := ipfamily.Set(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Sets the IPv6 address of the TUN adapter.
-func (tun *TunAdapter) setupAddress(addr string) error {
-	if tun.iface == nil || tun.Name() == "" {
-		return errors.New("Can't configure IPv6 address as TUN adapter is not present")
-	}
-	if intf, ok := tun.iface.(*wgtun.NativeTun); ok {
-		if ipnet, err := netip.ParsePrefix(addr); err == nil {
-			luid := winipcfg.LUID(intf.LUID())
-			addresses := []netip.Prefix{ipnet}
-			err := luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
-			if err == windows.ERROR_OBJECT_ALREADY_EXISTS {
-				cleanupAddressesOnDisconnectedInterfaces(windows.AF_INET6, addresses)
-				err = luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
-			}
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
+	intf, ok := device.(*tuntap.NativeTun)
+	if !ok {
 		return errors.New("unable to get NativeTUN")
 	}
-	return nil
+	luid := winipcfg.LUID(intf.LUID())
+	ipfamily, err := luid.IPInterface(windows.AF_INET6)
+	if err != nil {
+		return err
+	}
+
+	ipfamily.NLMTU = uint32(mtu)
+	intf.ForceMTU(int(ipfamily.NLMTU))
+	ipfamily.UseAutomaticMetric = false
+	ipfamily.Metric = 0
+	ipfamily.DadTransmits = 0
+	ipfamily.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
+
+	return ipfamily.Set()
 }
 
-/*
- * cleanupAddressesOnDisconnectedInterfaces
- * SPDX-License-Identifier: MIT
- * Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
- */
+func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
+	name, err := device.Name()
+	if err != nil || name == "" {
+		return errors.New("can't configure IPv6 address as TUN adapter is not present")
+	}
+	intf, ok := device.(*tuntap.NativeTun)
+	if !ok {
+		return errors.New("unable to get NativeTUN")
+	}
+	ipnet, err := netip.ParsePrefix(addr)
+	if err != nil {
+		return err
+	}
+	luid := winipcfg.LUID(intf.LUID())
+	addresses := []netip.Prefix{ipnet}
+	err = luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
+	if err == windows.ERROR_OBJECT_ALREADY_EXISTS {
+		cleanupAddressesOnDisconnectedInterfaces(windows.AF_INET6, addresses)
+		err = luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
+	}
+	return err
+}
+
 func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, addresses []netip.Prefix) {
 	if len(addresses) == 0 {
 		return
@@ -148,7 +134,7 @@ func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, add
 		for address := iface.FirstUnicastAddress; address != nil; address = address.Next {
 			if ip, _ := netip.AddrFromSlice(address.Address.IP()); addrHash[ip] {
 				prefix := netip.PrefixFrom(ip, int(address.OnLinkPrefixLength))
-				log.Printf("Cleaning up stale address %s from interface ‘%s’", prefix.String(), iface.FriendlyName())
+				log.Printf("Cleaning up stale address %s from interface '%s'", prefix.String(), iface.FriendlyName())
 				iface.LUID.DeleteIPAddress(prefix)
 			}
 		}

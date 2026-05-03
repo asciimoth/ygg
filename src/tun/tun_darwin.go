@@ -2,8 +2,6 @@
 
 package tun
 
-// The darwin platform specific tun parts
-
 import (
 	"encoding/binary"
 	"fmt"
@@ -12,151 +10,136 @@ import (
 	"strings"
 	"unsafe"
 
+	gtun "github.com/asciimoth/gonnect/tun"
+	"github.com/asciimoth/tuntap"
 	"golang.org/x/sys/unix"
-
-	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 
-// Configures the "utun" adapter with the correct IPv6 address and MTU.
-func (tun *TunAdapter) setup(ifname string, addr string, mtu uint64) error {
+func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
+	ifname := string(tun.config.name)
 	if ifname == "auto" {
 		ifname = "utun"
 	}
-	iface, err := wgtun.CreateTUN(ifname, int(mtu))
-	if err != nil {
-		return fmt.Errorf("failed to create TUN: %w", err)
-	}
-	tun.iface = iface
-	if m, err := iface.MTU(); err == nil {
-		tun.mtu = getSupportedMTU(uint64(m))
+	var (
+		device gtun.Tun
+		err    error
+	)
+	if tun.config.fd > 0 {
+		dfd, derr := unix.Dup(int(tun.config.fd))
+		if derr != nil {
+			return nil, fmt.Errorf("failed to duplicate FD: %w", derr)
+		}
+		if err = unix.SetNonblock(dfd, true); err != nil {
+			unix.Close(dfd)
+			return nil, fmt.Errorf("failed to set FD as non-blocking: %w", err)
+		}
+		device, err = tuntap.CreateTUNFromFile(os.NewFile(uintptr(dfd), "/dev/tun"), int(mtu))
 	} else {
-		tun.mtu = 0
+		device, err = tuntap.CreateTUN(ifname, int(mtu))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
 	if addr != "" {
-		return tun.setupAddress(addr)
+		if err := tun.configureAddress(device, addr); err != nil {
+			_ = device.Close()
+			return nil, err
+		}
 	}
-	return nil
-}
-
-// Configures the "utun" adapter from an existing file descriptor.
-func (tun *TunAdapter) setupFD(fd int32, addr string, mtu uint64) error {
-	dfd, err := unix.Dup(int(fd))
-	if err != nil {
-		return fmt.Errorf("failed to duplicate FD: %w", err)
-	}
-	err = unix.SetNonblock(dfd, true)
-	if err != nil {
-		unix.Close(dfd)
-		return fmt.Errorf("failed to set FD as non-blocking: %w", err)
-	}
-	iface, err := wgtun.CreateTUNFromFile(os.NewFile(uintptr(dfd), "/dev/tun"), 0)
-	if err != nil {
-		unix.Close(dfd)
-		return fmt.Errorf("failed to create TUN from FD: %w", err)
-	}
-	tun.iface = iface
-	if m, err := iface.MTU(); err == nil {
-		tun.mtu = getSupportedMTU(uint64(m))
-	} else {
-		tun.mtu = 0
-	}
-	return nil // tun.setupAddress(addr)
+	return device, nil
 }
 
 const (
-	darwin_SIOCAIFADDR_IN6       = 2155899162 // netinet6/in6_var.h
-	darwin_IN6_IFF_NODAD         = 0x0020     // netinet6/in6_var.h
-	darwin_IN6_IFF_SECURED       = 0x0400     // netinet6/in6_var.h
-	darwin_ND6_INFINITE_LIFETIME = 0xFFFFFFFF // netinet6/nd6.h
+	darwinSIOCAIFADDRIN6      = 2155899162
+	darwinIN6IFFNODAD         = 0x0020
+	darwinIN6IFFSECURED       = 0x0400
+	darwinND6InfiniteLifetime = 0xFFFFFFFF
 )
 
-// nolint:structcheck
-type in6_addrlifetime struct {
-	ia6t_expire    float64 // nolint:unused
-	ia6t_preferred float64 // nolint:unused
-	ia6t_vltime    uint32
-	ia6t_pltime    uint32
+type in6Addrlifetime struct {
+	ia6tExpire    float64
+	ia6tPreferred float64
+	ia6tVltime    uint32
+	ia6tPltime    uint32
 }
 
-// nolint:structcheck
-type sockaddr_in6 struct {
-	sin6_len      uint8
-	sin6_family   uint8
-	sin6_port     uint8  // nolint:unused
-	sin6_flowinfo uint32 // nolint:unused
-	sin6_addr     [8]uint16
-	sin6_scope_id uint32 // nolint:unused
+type sockaddrIn6 struct {
+	sin6Len      uint8
+	sin6Family   uint8
+	sin6Port     uint8
+	sin6Flowinfo uint32
+	sin6Addr     [8]uint16
+	sin6ScopeID  uint32
 }
 
-// nolint:structcheck
-type in6_aliasreq struct {
-	ifra_name       [16]byte
-	ifra_addr       sockaddr_in6
-	ifra_dstaddr    sockaddr_in6 // nolint:unused
-	ifra_prefixmask sockaddr_in6
-	ifra_flags      uint32
-	ifra_lifetime   in6_addrlifetime
+type in6Aliasreq struct {
+	ifraName       [16]byte
+	ifraAddr       sockaddrIn6
+	ifraDstaddr    sockaddrIn6
+	ifraPrefixmask sockaddrIn6
+	ifraFlags      uint32
+	ifraLifetime   in6Addrlifetime
 }
 
-type ifreq struct {
-	ifr_name [16]byte
-	ifru_mtu uint32
+type ifreqDarwin struct {
+	ifrName [16]byte
+	ifruMTU uint32
 }
 
-// Sets the IPv6 address of the utun adapter. On Darwin/macOS this is done using
-// a system socket and making direct syscalls to the kernel.
-func (tun *TunAdapter) setupAddress(addr string) error {
-	var fd int
-	var err error
-
-	if fd, err = unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0); err != nil {
+func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string) error {
+	name, err := device.Name()
+	if err != nil {
+		return fmt.Errorf("failed to read TUN name: %w", err)
+	}
+	mtu, err := device.MTU()
+	if err != nil {
+		return fmt.Errorf("failed to read TUN mtu: %w", err)
+	}
+	fd, err := unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0)
+	if err != nil {
 		tun.log.Errorf("Create AF_SYSTEM socket failed: %v.", err)
 		return fmt.Errorf("failed to open AF_SYSTEM: %w", err)
 	}
+	defer unix.Close(fd)
 
-	var ar in6_aliasreq
-	copy(ar.ifra_name[:], tun.Name())
+	var ar in6Aliasreq
+	copy(ar.ifraName[:], name)
 
-	ar.ifra_prefixmask.sin6_len = uint8(unsafe.Sizeof(ar.ifra_prefixmask))
+	ar.ifraPrefixmask.sin6Len = uint8(unsafe.Sizeof(ar.ifraPrefixmask))
 	b := make([]byte, 16)
 	binary.LittleEndian.PutUint16(b, uint16(0xFE00))
-	ar.ifra_prefixmask.sin6_addr[0] = binary.BigEndian.Uint16(b)
+	ar.ifraPrefixmask.sin6Addr[0] = binary.BigEndian.Uint16(b)
 
-	ar.ifra_addr.sin6_len = uint8(unsafe.Sizeof(ar.ifra_addr))
-	ar.ifra_addr.sin6_family = unix.AF_INET6
+	ar.ifraAddr.sin6Len = uint8(unsafe.Sizeof(ar.ifraAddr))
+	ar.ifraAddr.sin6Family = unix.AF_INET6
 	parts := strings.Split(strings.Split(addr, "/")[0], ":")
 	for i := 0; i < 8; i++ {
-		addr, _ := strconv.ParseUint(parts[i], 16, 16)
+		part, _ := strconv.ParseUint(parts[i], 16, 16)
 		b := make([]byte, 16)
-		binary.LittleEndian.PutUint16(b, uint16(addr))
-		ar.ifra_addr.sin6_addr[i] = binary.BigEndian.Uint16(b)
+		binary.LittleEndian.PutUint16(b, uint16(part))
+		ar.ifraAddr.sin6Addr[i] = binary.BigEndian.Uint16(b)
 	}
 
-	ar.ifra_flags |= darwin_IN6_IFF_NODAD
-	ar.ifra_flags |= darwin_IN6_IFF_SECURED
+	ar.ifraFlags |= darwinIN6IFFNODAD
+	ar.ifraFlags |= darwinIN6IFFSECURED
+	ar.ifraLifetime.ia6tVltime = darwinND6InfiniteLifetime
+	ar.ifraLifetime.ia6tPltime = darwinND6InfiniteLifetime
 
-	ar.ifra_lifetime.ia6t_vltime = darwin_ND6_INFINITE_LIFETIME
-	ar.ifra_lifetime.ia6t_pltime = darwin_ND6_INFINITE_LIFETIME
+	var ir ifreqDarwin
+	copy(ir.ifrName[:], name)
+	ir.ifruMTU = uint32(mtu)
 
-	var ir ifreq
-	copy(ir.ifr_name[:], tun.Name())
-	ir.ifru_mtu = uint32(tun.mtu)
-
-	tun.log.Infof("Interface name: %s", ar.ifra_name)
+	tun.log.Infof("Interface name: %s", name)
 	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", ir.ifru_mtu)
+	tun.log.Infof("Interface MTU: %d", ir.ifruMTU)
 
-	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(darwin_SIOCAIFADDR_IN6), uintptr(unsafe.Pointer(&ar))); errno != 0 { // nolint:staticcheck
-		err = errno
+	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(darwinSIOCAIFADDRIN6), uintptr(unsafe.Pointer(&ar))); errno != 0 {
 		tun.log.Errorf("Error in darwin_SIOCAIFADDR_IN6: %v", errno)
-		return fmt.Errorf("failed to call SIOCAIFADDR_IN6: %w", err)
+		return fmt.Errorf("failed to call SIOCAIFADDR_IN6: %w", errno)
 	}
-
-	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSIFMTU), uintptr(unsafe.Pointer(&ir))); errno != 0 { // nolint:staticcheck
-		err = errno
+	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSIFMTU), uintptr(unsafe.Pointer(&ir))); errno != 0 {
 		tun.log.Errorf("Error in SIOCSIFMTU: %v", errno)
-		return fmt.Errorf("failed to call SIOCSIFMTU: %w", err)
+		return fmt.Errorf("failed to call SIOCSIFMTU: %w", errno)
 	}
-
-	return err
+	return nil
 }

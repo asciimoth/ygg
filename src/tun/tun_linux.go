@@ -2,66 +2,60 @@
 
 package tun
 
-// The linux platform specific tun parts
-
 import (
 	"fmt"
 
+	gtun "github.com/asciimoth/gonnect/tun"
+	"github.com/asciimoth/tuntap"
 	"github.com/vishvananda/netlink"
-	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 
-// Configures the TUN adapter with the correct IPv6 address and MTU.
-func (tun *TunAdapter) setup(ifname string, addr string, mtu uint64) error {
+func (tun *TunAdapter) createNativeTun(addr string, mtu uint64) (gtun.Tun, error) {
+	ifname := string(tun.config.name)
 	if ifname == "auto" {
 		ifname = "\000"
 	}
-	iface, err := wgtun.CreateTUN(ifname, int(mtu))
+	device, err := tuntap.CreateTUN(ifname, int(mtu))
 	if err != nil {
-		return fmt.Errorf("failed to create TUN: %w", err)
-	}
-	tun.iface = iface
-	if mtu, err := iface.MTU(); err == nil {
-		tun.mtu = getSupportedMTU(uint64(mtu))
-	} else {
-		tun.mtu = 0
+		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
 	if addr != "" {
-		return tun.setupAddress(addr)
+		if err := tun.configureAddress(device, addr, mtu); err != nil {
+			_ = device.Close()
+			return nil, err
+		}
 	}
-	return nil
+	return device, nil
 }
 
-// Configures the "utun" adapter from an existing file descriptor.
-func (tun *TunAdapter) setupFD(fd int32, addr string, mtu uint64) error {
-	return fmt.Errorf("setup via FD not supported on this platform")
-}
-
-// Configures the TUN adapter with the correct IPv6 address and MTU. Netlink
-// is used to do this, so there is not a hard requirement on "ip" or "ifconfig"
-// to exist on the system, but this will fail if Netlink is not present in the
-// kernel (it nearly always is).
-func (tun *TunAdapter) setupAddress(addr string) error {
+func (tun *TunAdapter) configureAddress(device gtun.Tun, addr string, mtu uint64) error {
 	nladdr, err := netlink.ParseAddr(addr)
 	if err != nil {
 		return fmt.Errorf("couldn't parse address %q: %w", addr, err)
 	}
-	nlintf, err := netlink.LinkByName(tun.Name())
+	name, err := device.Name()
+	if err != nil {
+		return fmt.Errorf("failed to read link name: %w", err)
+	}
+	nlintf, err := netlink.LinkByName(name)
 	if err != nil {
 		return fmt.Errorf("failed to find link by name: %w", err)
 	}
 	if err := netlink.AddrAdd(nlintf, nladdr); err != nil {
 		return fmt.Errorf("failed to add address to link: %w", err)
 	}
-	if err := netlink.LinkSetMTU(nlintf, int(tun.mtu)); err != nil {
+	effectiveMTU, err := device.MTU()
+	if err != nil {
+		effectiveMTU = int(mtu)
+	}
+	if err := netlink.LinkSetMTU(nlintf, effectiveMTU); err != nil {
 		return fmt.Errorf("failed to set link MTU: %w", err)
 	}
 	if err := netlink.LinkSetUp(nlintf); err != nil {
 		return fmt.Errorf("failed to bring link up: %w", err)
 	}
-	// Friendly output
-	tun.log.Infof("Interface name: %s", tun.Name())
+	tun.log.Infof("Interface name: %s", name)
 	tun.log.Infof("Interface IPv6: %s", addr)
-	tun.log.Infof("Interface MTU: %d", tun.mtu)
+	tun.log.Infof("Interface MTU: %d", effectiveMTU)
 	return nil
 }
