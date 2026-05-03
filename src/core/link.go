@@ -16,6 +16,7 @@ import (
 
 	"github.com/Arceliar/phony"
 	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/transport"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -32,22 +33,10 @@ const minimumBackoffLimit = time.Second * 5
 
 type links struct {
 	phony.Inbox
-	core  *Core
-	tcp   *linkTCP   // TCP interface support
-	tls   *linkTLS   // TLS interface support
-	unix  *linkUNIX  // UNIX interface support
-	socks *linkSOCKS // SOCKS interface support
-	quic  *linkQUIC  // QUIC interface support
-	ws    *linkWS    // WS interface support
-	wss   *linkWSS   // WSS interface support
+	core *Core
 	// _links can only be modified safely from within the links actor
 	_links     map[linkInfo]*link // *link is nil if connection in progress
 	_listeners map[*Listener]context.CancelFunc
-}
-
-type linkProtocol interface {
-	dial(ctx context.Context, url *url.URL, info linkInfo, options linkOptions) (net.Conn, error)
-	listen(ctx context.Context, url *url.URL, sintf string) (net.Listener, error)
 }
 
 // linkInfo is used as a map key
@@ -72,7 +61,6 @@ type link struct {
 type linkOptions struct {
 	pinnedEd25519Keys map[keyArray]struct{}
 	priority          uint8
-	tlsSNI            string
 	password          []byte
 	maxBackoff        time.Duration
 }
@@ -89,13 +77,6 @@ func (l *Listener) Addr() net.Addr {
 
 func (l *links) init(c *Core) error {
 	l.core = c
-	l.tcp = l.newLinkTCP()
-	l.tls = l.newLinkTLS(l.tcp)
-	l.unix = l.newLinkUNIX()
-	l.socks = l.newLinkSOCKS()
-	l.quic = l.newLinkQUIC()
-	l.ws = l.newLinkWS()
-	l.wss = l.newLinkWSS()
 	l._links = make(map[linkInfo]*link)
 	l._listeners = make(map[*Listener]context.CancelFunc)
 
@@ -153,12 +134,10 @@ const ErrLinkPinnedKeyInvalid = linkError("pinned public key is invalid")
 const ErrLinkPasswordInvalid = linkError("invalid password supplied")
 const ErrLinkUnrecognisedSchema = linkError("link schema unknown")
 const ErrLinkMaxBackoffInvalid = linkError("max backoff duration invalid")
-const ErrLinkSNINotSupported = linkError("SNI not supported on this link type")
-const ErrLinkNoSuitableIPs = linkError("peer has no suitable addresses")
 const ErrLinkToSelf = linkError("node cannot connect to self")
 
 func (l *links) add(u *url.URL, sintf string, linkType linkType) error {
-	if _, err := l.dialerFor(u); err != nil {
+	if err := l.ensureSchemeSupported(u); err != nil {
 		return err
 	}
 	var retErr error
@@ -211,22 +190,6 @@ func (l *links) add(u *url.URL, sintf string, linkType linkType) error {
 				return
 			}
 			options.maxBackoff = d
-		}
-		// SNI headers must contain hostnames and not IP addresses, so we must make sure
-		// that we do not populate the SNI with an IP literal. We do this by splitting
-		// the host-port combo from the query option and then seeing if it parses to an
-		// IP address successfully or not.
-		if sni := u.Query().Get("sni"); sni != "" {
-			if net.ParseIP(sni) == nil {
-				options.tlsSNI = sni
-			}
-		}
-		// If the SNI is not configured still because the above failed then we'll try
-		// again but this time we'll use the host part of the peering URI instead.
-		if options.tlsSNI == "" {
-			if host, _, err := net.SplitHostPort(u.Host); err == nil && net.ParseIP(host) == nil {
-				options.tlsSNI = host
-			}
 		}
 
 		// If we think we're already connected to this peer, load up
@@ -445,27 +408,18 @@ func (l *links) remove(u *url.URL, sintf string, _ linkType) error {
 
 func (l *links) listen(u *url.URL, sintf string, local bool) (*Listener, error) {
 	ctx, ctxcancel := context.WithCancel(l.core.ctx)
-	var protocol linkProtocol
-	switch strings.ToLower(u.Scheme) {
-	case "tcp":
-		protocol = l.tcp
-	case "tls":
-		protocol = l.tls
-	case "unix":
-		protocol = l.unix
-	case "quic":
-		protocol = l.quic
-	case "ws":
-		protocol = l.ws
-	case "wss":
-		protocol = l.wss
-	default:
+	if err := l.ensureSchemeSupported(u); err != nil {
 		ctxcancel()
-		return nil, ErrLinkUnrecognisedSchema
+		return nil, err
 	}
-	listener, err := protocol.listen(ctx, u, sintf)
+	listener, err := l.core.tm.ListenWithOptions(ctx, u, transport.Options{
+		SourceInterface: sintf,
+	})
 	if err != nil {
 		ctxcancel()
+		if errors.Is(err, transport.ErrUnsupportedScheme) {
+			return nil, ErrLinkUnrecognisedSchema
+		}
 		return nil, err
 	}
 	addr := listener.Addr()
@@ -594,34 +548,16 @@ func (l *links) listen(u *url.URL, sintf string, local bool) (*Listener, error) 
 }
 
 func (l *links) connect(ctx context.Context, u *url.URL, info linkInfo, options linkOptions) (net.Conn, error) {
-	dialer, err := l.dialerFor(u)
-	if err != nil {
+	if err := l.ensureSchemeSupported(u); err != nil {
 		return nil, err
 	}
-	return dialer.dial(ctx, u, info, options)
-}
-
-func (l *links) dialerFor(u *url.URL) (linkProtocol, error) {
-	var dialer linkProtocol
-	switch strings.ToLower(u.Scheme) {
-	case "tcp":
-		dialer = l.tcp
-	case "tls":
-		dialer = l.tls
-	case "socks", "sockstls":
-		dialer = l.socks
-	case "unix":
-		dialer = l.unix
-	case "quic":
-		dialer = l.quic
-	case "ws":
-		dialer = l.ws
-	case "wss":
-		dialer = l.wss
-	default:
+	conn, err := l.core.tm.DialWithOptions(ctx, u, transport.Options{
+		SourceInterface: info.sintf,
+	})
+	if errors.Is(err, transport.ErrUnsupportedScheme) {
 		return nil, ErrLinkUnrecognisedSchema
 	}
-	return dialer, nil
+	return conn, err
 }
 
 func (l *links) handler(linkType linkType, options linkOptions, conn net.Conn, success func(), local bool) error {
@@ -717,55 +653,16 @@ func (l *links) handler(linkType linkType, options linkOptions, conn net.Conn, s
 	return err
 }
 
-func (l *links) findSuitableIP(url *url.URL, fn func(hostname string, ip net.IP, port int) (net.Conn, error)) (net.Conn, error) {
-	host, p, err := net.SplitHostPort(url.Host)
-	if err != nil {
-		return nil, err
-	}
-	port, err := strconv.Atoi(p)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := net.LookupIP(host)
-	if err != nil {
-		return nil, err
-	}
-	var _ips [64]net.IP
-	ips := _ips[:0]
-	for _, ip := range resp {
-		switch {
-		case ip.IsUnspecified():
-			continue
-		case ip.IsMulticast():
-			continue
-		case ip.IsLinkLocalMulticast():
-			continue
-		case ip.IsInterfaceLocalMulticast():
-			continue
-		case l.core.config.peerFilter != nil && !l.core.config.peerFilter(ip):
-			continue
-		}
-		ips = append(ips, ip)
-	}
-	if len(ips) == 0 {
-		return nil, ErrLinkNoSuitableIPs
-	}
-	for _, ip := range ips {
-		var conn net.Conn
-		if conn, err = fn(host, ip, port); err != nil {
-			url := *url
-			url.RawQuery = ""
-			l.core.log.Debugln("Dialling", url.Redacted(), "reported error:", err)
-			continue
-		}
-		return conn, nil
-	}
-	return nil, err
-}
-
 func urlForLinkInfo(u url.URL) url.URL {
 	u.RawQuery = ""
 	return u
+}
+
+func (l *links) ensureSchemeSupported(u *url.URL) error {
+	if l.core.tm == nil || !l.core.tm.HasTransport(u.Scheme) {
+		return ErrLinkUnrecognisedSchema
+	}
+	return nil
 }
 
 type linkConn struct {

@@ -12,29 +12,29 @@ import (
 	"github.com/asciimoth/ygg/transport"
 )
 
-func TestTransportTCPCompatWithLegacyLinks(t *testing.T) {
-	testTransportCompat(t, "tcp")
+func TestTransportTCPInterop(t *testing.T) {
+	testTransportInterop(t, "tcp")
 }
 
-func TestTransportTLSCompatWithLegacyLinks(t *testing.T) {
-	testTransportCompat(t, "tls")
+func TestTransportTLSInterop(t *testing.T) {
+	testTransportInterop(t, "tls")
 }
 
-func testTransportCompat(t *testing.T, scheme string) {
-	t.Run("legacy listener accepts transport dial", func(t *testing.T) {
+func testTransportInterop(t *testing.T, scheme string) {
+	t.Run("core listener accepts external transport dial", func(t *testing.T) {
 		nodeA, nodeB := newCompatNodes(t)
 		listenURL, err := url.Parse(scheme + "://127.0.0.1:0")
 		require_NoError(t, err)
-		legacyListener, err := nodeA.Listen(listenURL, "")
+		coreListener, err := nodeA.Listen(listenURL, "")
 		require_NoError(t, err)
-		defer legacyListener.Cancel()
+		defer coreListener.Cancel()
 
 		manager := newCompatManager(t, scheme, nodeB.config.tls)
 		defer manager.Close()
 
 		conn, err := manager.Dial(context.Background(), &url.URL{
 			Scheme: scheme,
-			Host:   legacyListener.Addr().String(),
+			Host:   coreListener.Addr().String(),
 		})
 		require_NoError(t, err)
 		defer conn.Close()
@@ -45,7 +45,7 @@ func testTransportCompat(t *testing.T, scheme string) {
 		requireTransportConnected(t, nodeA, nodeB)
 	})
 
-	t.Run("transport listener accepts legacy dial", func(t *testing.T) {
+	t.Run("external transport listener accepts core dial", func(t *testing.T) {
 		nodeA, nodeB := newCompatNodes(t)
 		manager := newCompatManager(t, scheme, nodeA.config.tls)
 		defer manager.Close()
@@ -86,18 +86,18 @@ func newCompatNodes(t *testing.T) (*Core, *Core) {
 	require_NoError(t, cfgA.GenerateSelfSignedCertificate())
 	require_NoError(t, cfgB.GenerateSelfSignedCertificate())
 
-	nodeA, err := New(cfgA.Certificate, GetLoggerWithPrefix("nodeA ", false))
+	nodeA, err := New(cfgA.Certificate, GetLoggerWithPrefix("nodeA ", false), TransportManager{Manager: newCoreTransportManager(t, cfgA.Certificate)})
 	require_NoError(t, err)
 	t.Cleanup(nodeA.Stop)
 
-	nodeB, err := New(cfgB.Certificate, GetLoggerWithPrefix("nodeB ", false))
+	nodeB, err := New(cfgB.Certificate, GetLoggerWithPrefix("nodeB ", false), TransportManager{Manager: newCoreTransportManager(t, cfgB.Certificate)})
 	require_NoError(t, err)
 	t.Cleanup(nodeB.Stop)
 
 	return nodeA, nodeB
 }
 
-func newCompatManager(t *testing.T, scheme string, tlsConfig interface{ Clone() *tls.Config }) *transport.Manager {
+func newCompatManager(t *testing.T, scheme string, tlsConfig *tls.Config) *transport.Manager {
 	t.Helper()
 
 	network := &native.Network{}

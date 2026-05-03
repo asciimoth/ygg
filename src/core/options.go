@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+
+	"github.com/asciimoth/ygg/transport"
 )
 
 func (c *Core) _applyOption(opt SetupOption) (err error) {
@@ -35,6 +37,11 @@ func (c *Core) _applyOption(opt SetupOption) (err error) {
 		pk := [32]byte{}
 		copy(pk[:], v)
 		c.config._allowedPublicKeys[pk] = struct{}{}
+	case TransportManager:
+		if v.Manager == nil {
+			return fmt.Errorf("transport manager is nil")
+		}
+		c.tm = v.Manager
 	}
 	return
 }
@@ -52,6 +59,9 @@ type NodeInfo map[string]interface{}
 type NodeInfoPrivacy bool
 type AllowedPublicKey ed25519.PublicKey
 type PeerFilter func(net.IP) bool
+type TransportManager struct {
+	Manager *transport.Manager
+}
 
 func (a ListenAddress) isSetupOption()    {}
 func (a Peer) isSetupOption()             {}
@@ -59,3 +69,4 @@ func (a NodeInfo) isSetupOption()         {}
 func (a NodeInfoPrivacy) isSetupOption()  {}
 func (a AllowedPublicKey) isSetupOption() {}
 func (a PeerFilter) isSetupOption()       {}
+func (a TransportManager) isSetupOption() {}

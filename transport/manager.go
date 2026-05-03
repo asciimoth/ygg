@@ -197,6 +197,16 @@ func (m *Manager) UnregisterTransport(scheme string) {
 	}
 }
 
+func (m *Manager) HasTransport(scheme string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.closed {
+		return false
+	}
+	_, ok := m.transports[normalizeScheme(scheme)]
+	return ok
+}
+
 func (m *Manager) SetDefaultNetwork(network Network) {
 	m.mu.Lock()
 	if m.closed {

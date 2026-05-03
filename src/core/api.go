@@ -12,6 +12,7 @@ import (
 
 	"github.com/Arceliar/ironwood/network"
 	"github.com/asciimoth/ygg/src/address"
+	"github.com/asciimoth/ygg/transport"
 )
 
 type SelfInfo struct {
@@ -220,6 +221,22 @@ func (c *Core) RemovePeer(u *url.URL, sintf string) error {
 // peer will not be called again automatically.
 func (c *Core) CallPeer(u *url.URL, sintf string) error {
 	return c.links.add(u, sintf, linkTypeEphemeral)
+}
+
+func (c *Core) TransportManager() *transport.Manager {
+	return c.tm
+}
+
+func (c *Core) SetTransportDefaultNetwork(network transport.Network) {
+	c.tm.SetDefaultNetwork(network)
+}
+
+func (c *Core) MapTransportNetwork(pattern string, network transport.Network) error {
+	return c.tm.MapNetwork(pattern, network)
+}
+
+func (c *Core) UnmapTransportNetwork(pattern string) error {
+	return c.tm.UnmapNetwork(pattern)
 }
 
 func (c *Core) PublicKey() ed25519.PublicKey {

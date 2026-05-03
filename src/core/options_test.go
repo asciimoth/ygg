@@ -15,7 +15,7 @@ func TestDuplicatePeerAtStartup(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		cfg.Peers = append(cfg.Peers, "tcp://1.2.3.4:4321")
 	}
-	if _, err := New(cfg.Certificate, nil); err != nil {
+	if _, err := New(cfg.Certificate, nil, TransportManager{Manager: newCoreTransportManager(t, cfg.Certificate)}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -27,7 +27,7 @@ func TestDuplicatePeerAtStartup(t *testing.T) {
 // configured.
 func TestDuplicatePeerFromAPI(t *testing.T) {
 	cfg := config.GenerateConfig()
-	c, err := New(cfg.Certificate, nil)
+	c, err := New(cfg.Certificate, nil, TransportManager{Manager: newCoreTransportManager(t, cfg.Certificate)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +42,19 @@ func TestDuplicatePeerFromAPI(t *testing.T) {
 
 func TestAddEmptyPeer(t *testing.T) {
 	cfg := config.GenerateConfig()
-	c, err := New(cfg.Certificate, nil)
+	c, err := New(cfg.Certificate, nil, TransportManager{Manager: newCoreTransportManager(t, cfg.Certificate)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	u, _ := url.Parse("")
 	if err := c.AddPeer(u, ""); err == nil {
 		t.Fatalf("Expected error on empty URL: %s", err)
+	}
+}
+
+func TestNewRequiresTransportManager(t *testing.T) {
+	cfg := config.GenerateConfig()
+	if _, err := New(cfg.Certificate, nil); err == nil {
+		t.Fatal("expected missing transport manager error")
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/hjson/hjson-go/v4"
 	"github.com/kardianos/minwinsvc"
 
+	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/admin"
 	"github.com/asciimoth/ygg/src/config"
@@ -30,6 +31,7 @@ import (
 	"github.com/asciimoth/ygg/src/multicast"
 	"github.com/asciimoth/ygg/src/tun"
 	"github.com/asciimoth/ygg/src/version"
+	"github.com/asciimoth/ygg/transport"
 )
 
 type node struct {
@@ -194,11 +196,28 @@ func main() {
 
 	// Set up the Yggdrasil node itself.
 	{
+		network := &native.Network{}
+		if err = network.Up(); err != nil {
+			panic(err)
+		}
+		manager := transport.NewManager(network)
+		if err = manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
+			panic(err)
+		}
+		tlsConfig, err := core.GenerateTLSConfig(cfg.Certificate)
+		if err != nil {
+			panic(err)
+		}
+		if err = manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
+			panic(err)
+		}
+
 		iprange := net.IPNet{
 			IP:   net.ParseIP("200::"),
 			Mask: net.CIDRMask(7, 128),
 		}
 		options := []core.SetupOption{
+			core.TransportManager{Manager: manager},
 			core.NodeInfo(cfg.NodeInfo),
 			core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
 			core.PeerFilter(func(ip net.IP) bool {

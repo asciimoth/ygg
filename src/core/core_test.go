@@ -3,13 +3,16 @@ package core
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/gologme/log"
+	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/ygg/src/config"
+	"github.com/asciimoth/ygg/transport"
+	"github.com/gologme/log"
 )
 
 // GetLoggerWithPrefix creates a new logger instance with prefix.
@@ -62,10 +65,10 @@ func CreateAndConnectTwo(t testing.TB, verbose bool) (nodeA *Core, nodeB *Core) 
 	logger := GetLoggerWithPrefix("", false)
 	logger.EnableLevel("debug")
 
-	if nodeA, err = New(cfgA.Certificate, logger); err != nil {
+	if nodeA, err = New(cfgA.Certificate, logger, TransportManager{Manager: newCoreTransportManager(t, cfgA.Certificate)}); err != nil {
 		t.Fatal(err)
 	}
-	if nodeB, err = New(cfgB.Certificate, logger); err != nil {
+	if nodeB, err = New(cfgB.Certificate, logger, TransportManager{Manager: newCoreTransportManager(t, cfgB.Certificate)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,6 +98,28 @@ func CreateAndConnectTwo(t testing.TB, verbose bool) (nodeA *Core, nodeB *Core) 
 	}
 
 	return nodeA, nodeB
+}
+
+func newCoreTransportManager(t testing.TB, cert *tls.Certificate) *transport.Manager {
+	t.Helper()
+
+	network := &native.Network{}
+	if err := network.Up(); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := transport.NewManager(network)
+	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig, err := GenerateTLSConfig(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
+		t.Fatal(err)
+	}
+	return manager
 }
 
 // WaitConnected blocks until either nodes negotiated DHT or 5 seconds passed.
@@ -229,11 +254,14 @@ func TestAllowedPublicKeys(t *testing.T) {
 	require_NoError(t, cfgA.GenerateSelfSignedCertificate())
 	require_NoError(t, cfgB.GenerateSelfSignedCertificate())
 
-	nodeA, err := New(cfgA.Certificate, logger, AllowedPublicKey("abcdef"))
+	nodeA, err := New(cfgA.Certificate, logger,
+		TransportManager{Manager: newCoreTransportManager(t, cfgA.Certificate)},
+		AllowedPublicKey("abcdef"),
+	)
 	require_NoError(t, err)
 	defer nodeA.Stop()
 
-	nodeB, err := New(cfgB.Certificate, logger)
+	nodeB, err := New(cfgB.Certificate, logger, TransportManager{Manager: newCoreTransportManager(t, cfgB.Certificate)})
 	require_NoError(t, err)
 	defer nodeB.Stop()
 
@@ -262,11 +290,14 @@ func TestAllowedPublicKeysLocal(t *testing.T) {
 	require_NoError(t, cfgA.GenerateSelfSignedCertificate())
 	require_NoError(t, cfgB.GenerateSelfSignedCertificate())
 
-	nodeA, err := New(cfgA.Certificate, logger, AllowedPublicKey("abcdef"))
+	nodeA, err := New(cfgA.Certificate, logger,
+		TransportManager{Manager: newCoreTransportManager(t, cfgA.Certificate)},
+		AllowedPublicKey("abcdef"),
+	)
 	require_NoError(t, err)
 	defer nodeA.Stop()
 
-	nodeB, err := New(cfgB.Certificate, logger)
+	nodeB, err := New(cfgB.Certificate, logger, TransportManager{Manager: newCoreTransportManager(t, cfgB.Certificate)})
 	require_NoError(t, err)
 	defer nodeB.Stop()
 

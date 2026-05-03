@@ -17,6 +17,7 @@ import (
 
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/version"
+	"github.com/asciimoth/ygg/transport"
 )
 
 // The Core object represents the Yggdrasil node. You should create a Core
@@ -32,6 +33,7 @@ type Core struct {
 	secret ed25519.PrivateKey
 	public ed25519.PublicKey
 	links  links
+	tm     *transport.Manager
 	proto  protoHandler
 	log    Logger
 	config struct {
@@ -88,8 +90,11 @@ func New(cert *tls.Certificate, logger Logger, opts ...SetupOption) (*Core, erro
 	}
 	c.public = c.secret.Public().(ed25519.PublicKey)
 
-	if c.config.tls, err = c.generateTLSConfig(cert); err != nil {
+	if c.config.tls, err = GenerateTLSConfig(cert); err != nil {
 		return nil, fmt.Errorf("error generating TLS config: %w", err)
+	}
+	if c.tm == nil {
+		return nil, fmt.Errorf("no transport manager supplied")
 	}
 	keyXform := func(key ed25519.PublicKey) ed25519.PublicKey {
 		return address.SubnetForKey(key).GetKey()

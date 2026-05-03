@@ -53,6 +53,14 @@ Purpose:
 Main type:
 - `core.Core`
 
+Construction:
+- `core.New` now requires the caller to provide a preconfigured
+  `transport.Manager` via `core.TransportManager{Manager: ...}`.
+- `core` does not create any default `gonnect.Network` or register any default
+  transports on behalf of the caller.
+- The embedding application is responsible for deciding which carrier schemes
+  exist and which `gonnect.Network` instances they use before starting `core`.
+
 Important internals:
 - `Core.PacketConn`: Ironwood encrypted packet router (`encrypted.PacketConn`)
 - `links`: manages direct peer connections and listeners
@@ -70,31 +78,30 @@ Responsibilities:
 
 #### Link subsystem
 
-`src/core/link*.go` implements carrier-specific peering behind one shared
-manager.
+`src/core/link.go` owns peer lifecycle and handshake policy, but carrier
+creation is delegated to the injected `transport.Manager`.
 
-Supported carrier families include:
+Currently supported carrier families are only those provided by the configured
+manager. In this repository today, the maintained built-in transports are:
 - TCP
 - TLS
-- UNIX sockets
-- SOCKS-wrapped TCP
-- QUIC
-- WebSocket / secure WebSocket
 
-The internal abstraction is:
+Former in-core carrier implementations for UNIX sockets, SOCKS, QUIC,
+WebSocket, and secure WebSocket have been removed. If those schemes are needed
+again, they should come back as `transport.Transport` implementations rather
+than as `core`-owned dialers/listeners.
 
-- `linkProtocol`
-  - `dial(ctx, url, info, options) (net.Conn, error)`
-  - `listen(ctx, url, sintf) (net.Listener, error)`
+The transport manager is responsible for turning a registered scheme into a
+reliable ordered `net.Conn` or `net.Listener`. Once a connection is
+established, `core` still owns:
+- Yggdrasil version/password handshake
+- pinned-key checks
+- `AllowedPublicKeys` enforcement
+- persistent-peer retry and backoff behavior
+- handoff into Ironwood via `HandleConn`
 
-Each carrier is responsible for turning its scheme into a reliable ordered
-`net.Conn`. Once a connection is established and the remote public key is known,
-`core` passes ownership into Ironwood with `HandleConn`.
-
-This remains the legacy in-core implementation. New transport-focused code
-should prefer the standalone `transport` package when only carrier setup and
-network selection are needed, leaving peer policy, reconnection behavior,
-handshakes, and overlay ownership in `core`.
+`core` also exposes its manager through public methods so callers can change
+default or mapped networks at runtime without rebuilding the node.
 
 ### `transport`
 
@@ -109,6 +116,13 @@ Purpose:
 
 Main type:
 - `transport.Manager`
+
+Construction model:
+- The manager starts empty.
+- It does not create or assume any default `gonnect.Network`.
+- It does not register any transports automatically.
+- Callers must explicitly set a default network if they want unmatched hosts to
+  be routable, and must explicitly register each supported transport scheme.
 
 Main interfaces:
 - `transport.Transport`
