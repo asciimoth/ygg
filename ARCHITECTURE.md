@@ -12,6 +12,8 @@ At runtime, the system is composed as:
    `gonnect.Network` selection for connection setup.
 3. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
 4. `admin` exposes a local control API over TCP or UNIX sockets.
+   The daemon wires admin adapters to `core`, `multicast`, and `tun` at
+   startup time.
 5. `multicast` optionally discovers local peers and feeds them back into
    `core` through a small runtime adapter.
 6. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
@@ -178,24 +180,27 @@ protocol messages to remote nodes through this subsystem.
 
 Purpose:
 - Expose a local management API for the daemon.
-- Register handlers from `core`, `multicast`, and `tun`.
+- Own admin transport, request dispatch, and runtime adapter registration.
 - Provide the protocol used by `yggdrasilctl`.
 
 Main type:
 - `admin.AdminSocket`
-
-Main interfaces:
-- `core.AddHandler`
-- `core.AddHandlerFunc`
 
 Behavior:
 - Listens on UNIX or TCP depending on configuration.
 - Accepts JSON requests of the form `{request, arguments, keepalive}`.
 - Dispatches to registered handlers and returns JSON responses.
 
-The admin package owns transport and request dispatch only. It does not
-implement most domain logic itself; instead it delegates into the packages that
-register handlers.
+Dependency boundary:
+- `src/admin` depends on `src/core` and may also adapt optional runtime
+  components like `*multicast.Multicast` and `*tun.TunAdapter`.
+- `src/core`, `src/multicast`, and `src/tun` do not depend on `src/admin`.
+- `cmd/yggdrasil` is the composition root that decides which adapters to
+  register.
+
+The admin package owns transport, request dispatch, and adapter glue. Domain
+logic remains in the underlying packages, which expose ordinary public methods
+and state accessors instead of accepting an admin instance.
 
 ### `src/multicast`
 
@@ -324,10 +329,13 @@ The daemon is intentionally small. Its job is to:
 - load config
 - build the logger
 - instantiate `core`
-- attach `admin`
+- construct `admin`
+- register admin adapters for `core`
 - optionally attach `multicast`
+- register admin adapters for `multicast` when enabled
 - create native TUNs through `tunnative` when configured
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
+- register admin adapters for `tun` when attached
 - manage shutdown ordering
 
 The daemon does not reimplement protocol logic. It is mostly dependency
@@ -407,13 +415,13 @@ In the default daemon, native attachments are created one layer above this via
 `admin.AdminSocket` exposes a handler registry:
 - `AddHandler(name, desc, args, handler)`
 
-Packages register their own commands:
-- `core.SetAdmin(...)`
-- `admin.SetupAdminHandlers()`
-- `multicast.SetupAdminHandlers(...)`
-- `tun.SetupAdminHandlers(...)`
+Runtime wiring is owned by `cmd/yggdrasil`:
+- `admin.SetupCoreHandlers()`
+- `admin.SetupMulticastHandlers(...)`
+- `admin.SetupTunHandlers(...)`
 
-This keeps admin transport centralized while leaving business logic distributed.
+This keeps admin transport and adapter glue centralized while leaving business
+logic distributed in packages that do not depend on the admin API.
 
 ## Data Flow
 
@@ -446,7 +454,7 @@ Local control:
 
 1. `yggdrasilctl` sends a JSON request to `admin`.
 2. `admin` dispatches to a registered handler.
-3. The handler queries or mutates `core`, `multicast`, or `tun`.
+3. The handler adapter queries or mutates `core`, `multicast`, or `tun`.
 
 Remote control and metadata:
 
