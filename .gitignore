@@ -34,7 +34,7 @@ go.work.sum
 /.pre-commit-config.yaml
 /.direnv
 
+# Temporary test harness artifacts, including tests/compat output.
 /.tmp/
 
 test.log
-
