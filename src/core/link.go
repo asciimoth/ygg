@@ -137,7 +137,7 @@ const ErrLinkMaxBackoffInvalid = linkError("max backoff duration invalid")
 const ErrLinkToSelf = linkError("node cannot connect to self")
 
 func (l *links) add(u *url.URL, sintf string, linkType linkType) error {
-	if err := l.ensureSchemeSupported(u); err != nil {
+	if err := l.ensureSchemeSupported(normalizeTransportURL(u)); err != nil {
 		return err
 	}
 	var retErr error
@@ -408,11 +408,12 @@ func (l *links) remove(u *url.URL, sintf string, _ linkType) error {
 
 func (l *links) listen(u *url.URL, sintf string, local bool) (*Listener, error) {
 	ctx, ctxcancel := context.WithCancel(l.core.ctx)
-	if err := l.ensureSchemeSupported(u); err != nil {
+	transportURL := normalizeTransportURL(u)
+	if err := l.ensureSchemeSupported(transportURL); err != nil {
 		ctxcancel()
 		return nil, err
 	}
-	listener, err := l.core.tm.ListenWithOptions(ctx, u, transport.Options{
+	listener, err := l.core.tm.ListenWithOptions(ctx, transportURL, transport.Options{
 		SourceInterface: sintf,
 	})
 	if err != nil {
@@ -548,10 +549,11 @@ func (l *links) listen(u *url.URL, sintf string, local bool) (*Listener, error) 
 }
 
 func (l *links) connect(ctx context.Context, u *url.URL, info linkInfo, options linkOptions) (net.Conn, error) {
-	if err := l.ensureSchemeSupported(u); err != nil {
+	transportURL := normalizeTransportURL(u)
+	if err := l.ensureSchemeSupported(transportURL); err != nil {
 		return nil, err
 	}
-	conn, err := l.core.tm.DialWithOptions(ctx, u, transport.Options{
+	conn, err := l.core.tm.DialWithOptions(ctx, transportURL, transport.Options{
 		SourceInterface: info.sintf,
 	})
 	if errors.Is(err, transport.ErrUnsupportedScheme) {
