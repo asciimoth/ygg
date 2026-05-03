@@ -5,7 +5,6 @@ go 1.24.0
 require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
-	github.com/cheggaaa/pb/v3 v3.1.7
 	github.com/coder/websocket v1.8.14
 	github.com/gologme/log v1.3.0
 	github.com/hashicorp/go-syslog v1.0.0
@@ -36,7 +35,6 @@ require (
 )
 
 require (
-	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
