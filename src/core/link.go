@@ -75,6 +75,12 @@ func (l *Listener) Addr() net.Addr {
 	return l.listener.Addr()
 }
 
+func (l *Listener) Stop() {
+	if l != nil && l.Cancel != nil {
+		l.Cancel()
+	}
+}
+
 func (l *links) init(c *Core) error {
 	l.core = c
 	l._links = make(map[linkInfo]*link)

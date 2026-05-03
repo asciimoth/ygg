@@ -8,6 +8,8 @@ func (m *Multicast) _applyOption(opt SetupOption) {
 		m.config._interfaces[v] = struct{}{}
 	case GroupAddress:
 		m.config._groupAddr = v
+	case ProtocolVersion:
+		m.config._protocolVersion = v
 	}
 }
 
@@ -25,6 +27,11 @@ type MulticastInterface struct {
 }
 
 type GroupAddress string
+type ProtocolVersion struct {
+	Major uint16
+	Minor uint16
+}
 
 func (a MulticastInterface) isSetupOption() {}
 func (a GroupAddress) isSetupOption()       {}
+func (a ProtocolVersion) isSetupOption()    {}

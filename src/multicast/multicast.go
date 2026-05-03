@@ -15,10 +15,34 @@ import (
 	"github.com/Arceliar/phony"
 	"github.com/wlynxg/anet"
 
-	"github.com/asciimoth/ygg/src/core"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/net/ipv6"
 )
+
+type Core interface {
+	ListenLocal(*url.URL, string) (Listener, error)
+	CallPeer(*url.URL, string) error
+	PublicKey() ed25519.PublicKey
+}
+
+type Listener interface {
+	Addr() net.Addr
+	Stop()
+}
+
+type Logger interface {
+	Printf(string, ...interface{})
+	Println(...interface{})
+	Infof(string, ...interface{})
+	Infoln(...interface{})
+	Warnf(string, ...interface{})
+	Warnln(...interface{})
+	Errorf(string, ...interface{})
+	Errorln(...interface{})
+	Debugf(string, ...interface{})
+	Debugln(...interface{})
+	Traceln(...interface{})
+}
 
 // Multicast represents the multicast advertisement and discovery mechanism used
 // by Yggdrasil to find peers on the same subnet. When a beacon is received on a
@@ -26,16 +50,17 @@ import (
 // automatically.
 type Multicast struct {
 	phony.Inbox
-	core        *core.Core
-	log         core.Logger
+	core        Core
+	log         Logger
 	sock        *ipv6.PacketConn
 	running     atomic.Bool
 	_listeners  map[string]*listenerInfo
 	_interfaces map[string]*interfaceInfo
 	_timer      *time.Timer
 	config      struct {
-		_groupAddr  GroupAddress
-		_interfaces map[MulticastInterface]struct{}
+		_groupAddr       GroupAddress
+		_interfaces      map[MulticastInterface]struct{}
+		_protocolVersion ProtocolVersion
 	}
 }
 
@@ -51,7 +76,7 @@ type interfaceInfo struct {
 }
 
 type listenerInfo struct {
-	listener *core.Listener
+	listener Listener
 	time     time.Time
 	interval time.Duration
 	port     uint16
@@ -60,7 +85,7 @@ type listenerInfo struct {
 // Start starts the multicast interface. This launches goroutines which will
 // listen for multicast beacons from other hosts and will advertise multicast
 // beacons out to the network.
-func New(core *core.Core, log core.Logger, opts ...SetupOption) (*Multicast, error) {
+func New(core Core, log Logger, opts ...SetupOption) (*Multicast, error) {
 	m := &Multicast{
 		core:        core,
 		log:         log,
@@ -82,6 +107,10 @@ func New(core *core.Core, log core.Logger, opts ...SetupOption) (*Multicast, err
 func (m *Multicast) _start() error {
 	if !m.running.CompareAndSwap(false, true) {
 		return fmt.Errorf("multicast module is already started")
+	}
+	if m.config._protocolVersion == (ProtocolVersion{}) {
+		m.running.Store(false)
+		return fmt.Errorf("multicast protocol version is not configured")
 	}
 	var anyEnabled bool
 	for intf := range m.config._interfaces {
@@ -262,7 +291,7 @@ func (m *Multicast) _announce() {
 	for name, info := range m._listeners {
 		// Prepare our stop function!
 		stop := func() {
-			info.listener.Cancel()
+			info.listener.Stop()
 			delete(m._listeners, name)
 			m.log.Debugln("No longer multicasting on", name)
 		}
@@ -349,8 +378,8 @@ func (m *Multicast) _announce() {
 			}
 			addr := linfo.listener.Addr().(*net.TCPAddr)
 			adv := multicastAdvertisement{
-				MajorVersion: core.ProtocolVersionMajor,
-				MinorVersion: core.ProtocolVersionMinor,
+				MajorVersion: m.config._protocolVersion.Major,
+				MinorVersion: m.config._protocolVersion.Minor,
 				PublicKey:    m.core.PublicKey(),
 				Port:         uint16(addr.Port),
 				Hash:         info.hash,
@@ -410,9 +439,9 @@ func (m *Multicast) listen() {
 			continue
 		}
 		switch {
-		case adv.MajorVersion != core.ProtocolVersionMajor:
+		case adv.MajorVersion != m.config._protocolVersion.Major:
 			continue
-		case adv.MinorVersion != core.ProtocolVersionMinor:
+		case adv.MinorVersion != m.config._protocolVersion.Minor:
 			continue
 		case adv.PublicKey.Equal(m.core.PublicKey()):
 			continue

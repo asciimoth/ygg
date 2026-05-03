@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
@@ -40,6 +41,22 @@ type node struct {
 	tun       *yggtun.TunAdapter
 	multicast *multicast.Multicast
 	admin     *admin.AdminSocket
+}
+
+type multicastCoreAdapter struct {
+	core *core.Core
+}
+
+func (a multicastCoreAdapter) ListenLocal(u *url.URL, sintf string) (multicast.Listener, error) {
+	return a.core.ListenLocal(u, sintf)
+}
+
+func (a multicastCoreAdapter) CallPeer(u *url.URL, sintf string) error {
+	return a.core.CallPeer(u, sintf)
+}
+
+func (a multicastCoreAdapter) PublicKey() ed25519.PublicKey {
+	return a.core.PublicKey()
 }
 
 // The main function is responsible for configuring and starting Yggdrasil.
@@ -281,7 +298,11 @@ func main() {
 				Password: intf.Password,
 			})
 		}
-		if n.multicast, err = multicast.New(n.core, logger, options...); err != nil {
+		options = append(options, multicast.ProtocolVersion{
+			Major: core.ProtocolVersionMajor,
+			Minor: core.ProtocolVersionMinor,
+		})
+		if n.multicast, err = multicast.New(multicastCoreAdapter{core: n.core}, logger, options...); err != nil {
 			panic(err)
 		}
 		if n.admin != nil && n.multicast != nil {
