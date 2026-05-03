@@ -1,6 +1,6 @@
 module github.com/asciimoth/ygg
 
-go 1.24.0
+go 1.25.5
 
 require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
@@ -15,7 +15,7 @@ require (
 	github.com/wlynxg/anet v0.0.5
 	golang.org/x/crypto v0.48.0
 	golang.org/x/net v0.50.0
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.34.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
