@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 
+	"github.com/asciimoth/ygg/autopeer"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/multicast"
 	"github.com/asciimoth/ygg/src/tun"
@@ -31,6 +32,47 @@ type DebugGetTreeResponse map[string]DebugKeys
 
 type GetMulticastInterfacesResponse struct {
 	Interfaces []multicast.InterfaceState `json:"multicast_interfaces"`
+}
+
+type GetAutoPeerResponse struct {
+	Enabled                   bool            `json:"enabled"`
+	Active                    bool            `json:"active"`
+	Sources                   []string        `json:"sources"`
+	FetchInterval             string          `json:"fetch_interval"`
+	CheckInterval             string          `json:"check_interval"`
+	MinimumConnected          int             `json:"minimum_connected"`
+	MinimumConnectedFromFetch int             `json:"minimum_connected_from_fetch"`
+	Countries                 []string        `json:"countries"`
+	TransportSchemes          []string        `json:"transport_schemes"`
+	Peers                     []autopeer.Peer `json:"peers"`
+}
+
+func (a *AdminSocket) SetupAutoPeerHandlers(m *autopeer.Manager, enabled bool) {
+	if m == nil {
+		return
+	}
+	_ = a.AddHandler(
+		"getAutoPeer", "Show autopeer configuration, state and fetched peers", []string{},
+		func(_ json.RawMessage) (interface{}, error) {
+			managerCfg := m.Config()
+			fetcher := m.Fetcher()
+			res := &GetAutoPeerResponse{
+				Enabled:                   enabled,
+				Active:                    m.IsStarted(),
+				CheckInterval:             managerCfg.CheckInterval.String(),
+				MinimumConnected:          managerCfg.MinimumConnected,
+				MinimumConnectedFromFetch: managerCfg.MinimumConnectedFromFetch,
+				Countries:                 managerCfg.Countries,
+				TransportSchemes:          managerCfg.TransportSchemes,
+				Peers:                     m.Peers(),
+			}
+			if fetcher != nil {
+				res.Sources = fetcher.Sources()
+				res.FetchInterval = fetcher.Interval().String()
+			}
+			return res, nil
+		},
+	)
 }
 
 func (a *AdminSocket) SetupMulticastHandlers(m *multicast.Multicast) {

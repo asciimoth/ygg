@@ -104,7 +104,29 @@ func TestManagerCheckNow(t *testing.T) {
 	t.Run("idle without filters", func(t *testing.T) {
 		manager, logger := newManager(nil, &stubPeerManager{}, ManagerConfig{MinimumConnected: 1})
 		manager.checkNow()
-		if !strings.Contains(logger.joined(), "no country or transport filters configured") {
+		if !strings.Contains(logger.joined(), "both country and transport filters must be configured") {
+			t.Fatalf("unexpected log output: %q", logger.joined())
+		}
+	})
+
+	t.Run("idle without countries", func(t *testing.T) {
+		manager, logger := newManager(nil, &stubPeerManager{}, ManagerConfig{
+			MinimumConnected: 1,
+			TransportSchemes: []string{"tls"},
+		})
+		manager.checkNow()
+		if !strings.Contains(logger.joined(), "both country and transport filters must be configured") {
+			t.Fatalf("unexpected log output: %q", logger.joined())
+		}
+	})
+
+	t.Run("idle without transport schemes", func(t *testing.T) {
+		manager, logger := newManager(nil, &stubPeerManager{}, ManagerConfig{
+			MinimumConnected: 1,
+			Countries:        []string{"georgia"},
+		})
+		manager.checkNow()
+		if !strings.Contains(logger.joined(), "both country and transport filters must be configured") {
 			t.Fatalf("unexpected log output: %q", logger.joined())
 		}
 	})
@@ -113,6 +135,7 @@ func TestManagerCheckNow(t *testing.T) {
 		manager, logger := newManager(nil, nil, ManagerConfig{
 			MinimumConnected: 1,
 			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tls"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "no peer manager configured") {
@@ -122,7 +145,8 @@ func TestManagerCheckNow(t *testing.T) {
 
 	t.Run("idle without conditions", func(t *testing.T) {
 		manager, logger := newManager(nil, &stubPeerManager{}, ManagerConfig{
-			Countries: []string{"georgia"},
+			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tls"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "no conditions configured") {
@@ -139,6 +163,7 @@ func TestManagerCheckNow(t *testing.T) {
 			MinimumConnected:          2,
 			MinimumConnectedFromFetch: 1,
 			Countries:                 []string{"georgia"},
+			TransportSchemes:          []string{"tcp"},
 		})
 		manager.checkNow()
 		if len(core.addCalls) != 0 {
@@ -179,6 +204,7 @@ func TestManagerCheckNow(t *testing.T) {
 			testPeer("georgia", endpoint("quic://fallback:1", "", "50")),
 		}, core, ManagerConfig{
 			MinimumConnected: 1,
+			Countries:        []string{"georgia"},
 			TransportSchemes: []string{"quic"},
 		})
 		manager.checkNow()
@@ -196,6 +222,7 @@ func TestManagerCheckNow(t *testing.T) {
 		}, core, ManagerConfig{
 			MinimumConnected: 1,
 			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tcp"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "no eligible peers remain") {
@@ -209,6 +236,7 @@ func TestManagerCheckNow(t *testing.T) {
 		}, &stubPeerManager{}, ManagerConfig{
 			MinimumConnected: 1,
 			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tcp"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "rejected candidate") {
@@ -223,6 +251,7 @@ func TestManagerCheckNow(t *testing.T) {
 		}, core, ManagerConfig{
 			MinimumConnected: 1,
 			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tcp"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "add tcp://new:1 failed: boom") {
@@ -236,6 +265,7 @@ func TestManagerCheckNow(t *testing.T) {
 		}, &stubPeerManager{}, ManagerConfig{
 			MinimumConnected: 1,
 			Countries:        []string{"georgia"},
+			TransportSchemes: []string{"tcp"},
 		})
 		manager.checkNow()
 		if !strings.Contains(logger.joined(), "selection failed") {
@@ -258,6 +288,7 @@ func TestManagerLifecycleAndHelpers(t *testing.T) {
 		CheckInterval:    5 * time.Millisecond,
 		MinimumConnected: 1,
 		Countries:        []string{"georgia"},
+		TransportSchemes: []string{"tcp"},
 	})
 	if got := manager.Config(); got.CheckInterval != 5*time.Millisecond || len(got.Countries) != 1 {
 		t.Fatalf("unexpected config snapshot: %#v", got)
@@ -326,6 +357,7 @@ func TestManagerAppliesIntervalConfigUpdatesOnTheFly(t *testing.T) {
 		CheckInterval:    time.Hour,
 		MinimumConnected: 1,
 		Countries:        []string{"georgia"},
+		TransportSchemes: []string{"tcp"},
 	})
 
 	if !manager.Start() {
@@ -349,6 +381,7 @@ func TestManagerAppliesIntervalConfigUpdatesOnTheFly(t *testing.T) {
 		CheckInterval:    5 * time.Millisecond,
 		MinimumConnected: 1,
 		Countries:        []string{"georgia"},
+		TransportSchemes: []string{"tcp"},
 	})
 
 	waitFor(t, func() bool {

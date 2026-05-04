@@ -197,6 +197,20 @@ func (f *Fetcher) Peers() []Peer {
 	return clonePeers(f.peers)
 }
 
+// Sources returns the current ordered source list.
+func (f *Fetcher) Sources() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return slices.Clone(f.sourceOrder)
+}
+
+// Interval returns the current fetch interval.
+func (f *Fetcher) Interval() time.Duration {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.interval
+}
+
 // FetchNow fetches one source immediately, outside the normal periodic order.
 func (f *Fetcher) FetchNow(ctx context.Context, source string) error {
 	if source == BuiltinSource {

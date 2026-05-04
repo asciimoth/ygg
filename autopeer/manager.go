@@ -47,9 +47,9 @@ type endpointCandidate struct {
 // conditions are not met, it selects one eligible endpoint from the fetcher
 // snapshot and adds it to the peer manager.
 //
-// Countries and transport schemes are optional independent filters, but at
-// least one of them must be configured before the manager will attempt to add
-// any peers.
+// Countries and transport schemes are required filters. The manager remains
+// idle unless both are configured, because peer selection needs a country
+// filter and a transport-scheme filter at the same time.
 type Manager struct {
 	fetcher *Fetcher
 
@@ -127,6 +127,16 @@ func (m *Manager) Config() ManagerConfig {
 	config.Countries = slices.Clone(config.Countries)
 	config.TransportSchemes = slices.Clone(config.TransportSchemes)
 	return config
+}
+
+// IsStarted reports whether the manager loop is currently active.
+func (m *Manager) IsStarted() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.active && !m.closed
 }
 
 // Start starts the manager loop and the underlying fetcher.
@@ -241,8 +251,8 @@ func (m *Manager) checkNow() {
 	}
 
 	snapshot := m.snapshot()
-	if len(snapshot.countries) == 0 && len(snapshot.transports) == 0 {
-		m.logf("autopeer manager idle: no country or transport filters configured")
+	if len(snapshot.countries) == 0 || len(snapshot.transports) == 0 {
+		m.logf("autopeer manager idle: both country and transport filters must be configured")
 		return
 	}
 	if snapshot.core == nil {

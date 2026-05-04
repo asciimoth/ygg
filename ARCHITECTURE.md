@@ -194,7 +194,7 @@ Behavior:
   thresholds, and attempts to add at most one new public peer per check when
   thresholds are unmet.
 - Candidate selection filters endpoints by configured countries and transport
-  schemes. If both filters are empty, the manager remains idle.
+  schemes. If either filter is empty, the manager remains idle.
 - Supported thresholds today are:
   - minimum total connected peers
   - minimum connected peers whose URIs are present in the filtered fetcher set

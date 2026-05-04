@@ -30,6 +30,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hjson/hjson-go/v4"
@@ -49,11 +50,23 @@ type NodeConfig struct {
 	AdminListen         string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
 	MulticastInterfaces []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
 	AllowedPublicKeys   []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
+	AutoPeer            AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
 	IfName              string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
 	IfMTU               uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
 	LogLookups          bool                       `json:",omitempty"`
 	NodeInfoPrivacy     bool                       `comment:"By default, nodeinfo contains some defaults including the platform,\narchitecture and Yggdrasil version. These can help when surveying\nthe network and diagnosing network routing problems. Enabling\nnodeinfo privacy prevents this, so that only items specified in\n\"NodeInfo\" are sent back if specified."`
 	NodeInfo            map[string]interface{}     `comment:"Optional nodeinfo. This must be a { \"key\": \"value\", ... } map\nor set as null. This is entirely optional but, if set, is visible\nto the whole network on request."`
+}
+
+type AutoPeerConfig struct {
+	Enabled                   bool     `comment:"Enable public-peer autopeering."`
+	Sources                   []string `comment:"Ordered list of public-peer sources. Entries may be HTTPS URLs\nreturning the public-peers JSON document format or the special value\n\"BUILTIN\" for the embedded peer list."`
+	FetchInterval             string   `comment:"How often to refresh configured public-peer sources. Uses Go duration\nsyntax such as \"30m\" or \"1h\"."`
+	CheckInterval             string   `comment:"How often runtime autopeering policy should be evaluated. Uses Go\nduration syntax such as \"1m\"."`
+	MinimumConnected          int      `comment:"Minimum number of connected peers before autopeering remains idle."`
+	MinimumConnectedFromFetch int      `comment:"Minimum number of connected peers whose URIs are present in the\nfiltered autopeer source set before autopeering remains idle."`
+	Countries                 []string `comment:"Optional country filters for peer selection, matched case-insensitively\nagainst public-peer metadata."`
+	TransportSchemes          []string `comment:"Transport scheme filters for peer selection, e.g. [\"tcp\", \"tls\"].\nAutopeering stays idle unless both this and Countries are configured."`
 }
 
 type MulticastInterfaceConfig struct {
@@ -79,6 +92,11 @@ func GenerateConfig() *NodeConfig {
 	cfg.Peers = []string{}
 	cfg.InterfacePeers = map[string][]string{}
 	cfg.AllowedPublicKeys = []string{}
+	cfg.AutoPeer = AutoPeerConfig{
+		Sources:       []string{"BUILTIN"},
+		FetchInterval: "1h",
+		CheckInterval: "1m",
+	}
 	cfg.MulticastInterfaces = defaults.DefaultMulticastInterfaces
 	cfg.IfName = defaults.DefaultIfName
 	cfg.IfMTU = defaults.DefaultIfMTU
@@ -127,6 +145,9 @@ func (cfg *NodeConfig) UnmarshalHJSON(b []byte) error {
 }
 
 func (cfg *NodeConfig) postprocessConfig() error {
+	if err := cfg.AutoPeer.normalize(); err != nil {
+		return err
+	}
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
 		f, err := os.ReadFile(cfg.PrivateKeyPath)
@@ -150,6 +171,43 @@ func (cfg *NodeConfig) postprocessConfig() error {
 		}
 	}
 	return nil
+}
+
+func (cfg *AutoPeerConfig) normalize() error {
+	cfg.Sources = normalizeStringSlice(cfg.Sources)
+	cfg.Countries = normalizeStringSlice(cfg.Countries)
+	cfg.TransportSchemes = normalizeStringSlice(cfg.TransportSchemes)
+
+	if strings.TrimSpace(cfg.FetchInterval) == "" {
+		cfg.FetchInterval = "1h"
+	}
+	if _, err := time.ParseDuration(cfg.FetchInterval); err != nil {
+		return fmt.Errorf("invalid AutoPeer.FetchInterval: %w", err)
+	}
+
+	if strings.TrimSpace(cfg.CheckInterval) == "" {
+		cfg.CheckInterval = "1m"
+	}
+	if _, err := time.ParseDuration(cfg.CheckInterval); err != nil {
+		return fmt.Errorf("invalid AutoPeer.CheckInterval: %w", err)
+	}
+
+	return nil
+}
+
+func normalizeStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
 }
 
 // RFC5280 section 4.1.2.5

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
+
+	"github.com/asciimoth/ygg/autopeer"
 )
 
 type testLogger struct{}
@@ -82,3 +85,66 @@ func TestAdminSocketConcurrentHandlerAccess(t *testing.T) {
 	}
 	<-serverDone
 }
+
+func TestSetupAutoPeerHandlers(t *testing.T) {
+	logger := &autopeerTestLogger{}
+	fetcher := autopeer.NewFetcher(logger, time.Hour)
+	fetcher.SetSources([]string{autopeer.BuiltinSource})
+	fetcher.SetDefaultNetwork(nil)
+
+	manager := autopeer.NewManager(fetcher)
+	manager.SetConfig(autopeer.ManagerConfig{
+		CheckInterval:             time.Minute,
+		MinimumConnected:          2,
+		MinimumConnectedFromFetch: 1,
+		Countries:                 []string{"georgia"},
+		TransportSchemes:          []string{"tls"},
+	})
+
+	a := &AdminSocket{
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	a.SetupAutoPeerHandlers(manager, true)
+
+	h, ok := a.handlers["getautopeer"]
+	if !ok {
+		t.Fatal("expected getAutoPeer handler to be registered")
+	}
+	res, err := h.handler(nil)
+	if err != nil {
+		t.Fatalf("getAutoPeer handler returned error: %v", err)
+	}
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal getAutoPeer response: %v", err)
+	}
+
+	var resp GetAutoPeerResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal getAutoPeer response: %v", err)
+	}
+	if !resp.Enabled {
+		t.Fatal("expected autopeer enabled flag in response")
+	}
+	if resp.Active {
+		t.Fatal("expected autopeer manager to be inactive")
+	}
+	if resp.FetchInterval != time.Hour.String() {
+		t.Fatalf("unexpected fetch interval %q", resp.FetchInterval)
+	}
+	if resp.CheckInterval != time.Minute.String() {
+		t.Fatalf("unexpected check interval %q", resp.CheckInterval)
+	}
+	if len(resp.Sources) != 1 || resp.Sources[0] != autopeer.BuiltinSource {
+		t.Fatalf("unexpected sources: %#v", resp.Sources)
+	}
+	if len(resp.Peers) == 0 {
+		t.Fatal("expected builtin autopeer source to expose fetched peers")
+	}
+}
+
+type autopeerTestLogger struct{}
+
+func (*autopeerTestLogger) Printf(string, ...interface{}) {}

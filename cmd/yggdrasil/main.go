@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"suah.dev/protect"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/kardianos/minwinsvc"
 
 	"github.com/asciimoth/gonnect/native"
+	"github.com/asciimoth/ygg/autopeer"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/admin"
 	"github.com/asciimoth/ygg/src/config"
@@ -40,6 +42,7 @@ type node struct {
 	core      *core.Core
 	tun       *yggtun.TunAdapter
 	multicast *multicast.Multicast
+	autopeer  *autopeer.Manager
 	admin     *admin.AdminSocket
 }
 
@@ -267,6 +270,30 @@ func main() {
 		logger.Printf("Your public key is %s", hex.EncodeToString(n.core.PublicKey()))
 		logger.Printf("Your IPv6 address is %s", address.String())
 		logger.Printf("Your IPv6 subnet is %s", subnet.String())
+
+		fetchInterval, err := time.ParseDuration(cfg.AutoPeer.FetchInterval)
+		if err != nil {
+			panic(err)
+		}
+		checkInterval, err := time.ParseDuration(cfg.AutoPeer.CheckInterval)
+		if err != nil {
+			panic(err)
+		}
+		fetcher := autopeer.NewFetcher(logger, fetchInterval)
+		fetcher.SetDefaultNetwork(network)
+		fetcher.SetSources(cfg.AutoPeer.Sources)
+		n.autopeer = autopeer.NewManager(fetcher)
+		n.autopeer.SetPeerManager(n.core)
+		n.autopeer.SetConfig(autopeer.ManagerConfig{
+			CheckInterval:             checkInterval,
+			MinimumConnected:          cfg.AutoPeer.MinimumConnected,
+			MinimumConnectedFromFetch: cfg.AutoPeer.MinimumConnectedFromFetch,
+			Countries:                 cfg.AutoPeer.Countries,
+			TransportSchemes:          cfg.AutoPeer.TransportSchemes,
+		})
+		if cfg.AutoPeer.Enabled {
+			n.autopeer.Start()
+		}
 	}
 
 	// Set up the admin socket.
@@ -282,6 +309,7 @@ func main() {
 		}
 		if n.admin != nil {
 			n.admin.SetupCoreHandlers()
+			n.admin.SetupAutoPeerHandlers(n.autopeer, cfg.AutoPeer.Enabled)
 		}
 	}
 
@@ -382,6 +410,7 @@ func main() {
 
 	// Shut down the node.
 	_ = n.admin.Stop()
+	_ = n.autopeer.Close()
 	_ = n.multicast.Stop()
 	_ = n.tun.Stop()
 	n.core.Stop()
