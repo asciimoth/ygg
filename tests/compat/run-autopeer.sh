@@ -34,6 +34,11 @@ run() {
 	"$@"
 }
 
+run_quiet() {
+	log "$*"
+	"$@" >/dev/null
+}
+
 docker_shell() {
 	local cont="$1"
 	local cmd="$2"
@@ -49,7 +54,7 @@ ctl_json() {
 ctl() {
 	local cont="$1"
 	shift
-	run docker exec "${cont}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" "$@"
+	run_quiet docker exec "${cont}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" "$@"
 }
 
 capture_state() {
@@ -213,8 +218,6 @@ wait_for_autopeer_effect() {
 		connected_up="$(printf '%s' "${peers_json}" | docker exec -i "${cont}" jq -r '[.peers[] | select(.up == true)] | length')"
 
 		log "${cont}: autopeer attempt ${i}/${attempts} active=${active} fetched=${fetched} peers_total=${connected} peers_up=${connected_up}"
-		printf '%s\n' "${autopeer_json}" | docker exec -i "${cont}" jq -c '{enabled,active,sources,check_interval,minimum_connected,minimum_connected_from_fetch,countries,transport_schemes,peer_count:(.peers|length)}' >&2
-		printf '%s\n' "${peers_json}" | docker exec -i "${cont}" jq -c '[.peers[] | {uri:.remote, up, inbound, address}]' >&2
 
 		if [ "${active}" = "true" ] && [ "${fetched}" -gt 0 ] && [ "${connected_up}" -gt 0 ]; then
 			log "${cont}: autopeering took effect"

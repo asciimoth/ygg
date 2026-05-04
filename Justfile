@@ -20,3 +20,6 @@ test-autopeer:
 # Docker-based transport-manager control test between two local daemons. Uses sudo.
 test-transport:
 	sudo ./tests/compat/run-transport.sh
+
+test-total: test test-compat test-autopeer test-transport
+

@@ -29,6 +29,11 @@ run() {
 	"$@"
 }
 
+run_quiet() {
+	log "$*"
+	"$@" >/dev/null
+}
+
 docker_shell() {
 	local cont="$1"
 	local cmd="$2"
@@ -44,7 +49,7 @@ ctl_json() {
 ctl() {
 	local cont="$1"
 	shift
-	run docker exec "${cont}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" "$@"
+	run_quiet docker exec "${cont}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" "$@"
 }
 
 capture_state() {
