@@ -106,7 +106,8 @@ func TestSetupAutoPeerHandlers(t *testing.T) {
 		handlers: make(map[string]handler),
 		done:     make(chan struct{}),
 	}
-	a.SetupAutoPeerHandlers(manager, true)
+	controller := NewAutoPeerController(manager, true)
+	a.SetupAutoPeerHandlers(controller)
 
 	h, ok := a.handlers["getautopeer"]
 	if !ok {
@@ -142,6 +143,61 @@ func TestSetupAutoPeerHandlers(t *testing.T) {
 	}
 	if len(resp.Peers) == 0 {
 		t.Fatal("expected builtin autopeer source to expose fetched peers")
+	}
+}
+
+func TestAutoPeerControllerApply(t *testing.T) {
+	logger := &autopeerTestLogger{}
+	fetcher := autopeer.NewFetcher(logger, time.Hour)
+	manager := autopeer.NewManager(fetcher)
+	controller := NewAutoPeerController(manager, false)
+
+	err := controller.Apply(&SetAutoPeerRequest{
+		Enabled:                   "true",
+		Sources:                   "BUILTIN",
+		FetchInterval:             "30m",
+		CheckInterval:             "5s",
+		MinimumConnected:          "2",
+		MinimumConnectedFromFetch: "1",
+		Countries:                 "georgia, france",
+		TransportSchemes:          "tls,tcp",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	if !controller.Enabled() {
+		t.Fatal("expected controller to be enabled")
+	}
+	if !manager.IsStarted() {
+		t.Fatal("expected manager to be started")
+	}
+
+	snapshot := controller.Snapshot()
+	if snapshot == nil {
+		t.Fatal("expected autopeer snapshot")
+	}
+	if snapshot.FetchInterval != "30m0s" {
+		t.Fatalf("unexpected fetch interval %q", snapshot.FetchInterval)
+	}
+	if snapshot.CheckInterval != "5s" {
+		t.Fatalf("unexpected check interval %q", snapshot.CheckInterval)
+	}
+	if snapshot.MinimumConnected != 2 || snapshot.MinimumConnectedFromFetch != 1 {
+		t.Fatalf("unexpected thresholds: %#v", snapshot)
+	}
+	if len(snapshot.Sources) != 1 || snapshot.Sources[0] != autopeer.BuiltinSource {
+		t.Fatalf("unexpected sources: %#v", snapshot.Sources)
+	}
+	if len(snapshot.Countries) != 2 || snapshot.Countries[0] != "georgia" || snapshot.Countries[1] != "france" {
+		t.Fatalf("unexpected countries: %#v", snapshot.Countries)
+	}
+	if len(snapshot.TransportSchemes) != 2 || snapshot.TransportSchemes[0] != "tls" || snapshot.TransportSchemes[1] != "tcp" {
+		t.Fatalf("unexpected transport schemes: %#v", snapshot.TransportSchemes)
+	}
+
+	if err := manager.Close(); err != nil {
+		t.Fatalf("manager close failed: %v", err)
 	}
 }
 

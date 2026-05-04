@@ -1,9 +1,10 @@
 # Testing
 
-This repository has two main test layers:
+This repository has three main test layers:
 
 - Fast package tests with `go test ./... --race`
 - A Linux Docker compatibility suite that runs this fork against pinned upstream `yggdrasil-go`
+- A Linux Docker public-autopeering suite that validates runtime autopeer setup through the admin API
 
 ## Standard Checks
 
@@ -82,3 +83,73 @@ Each run captures:
 - `yggdrasilctl -json getTun`
 
 Containers, Docker network, and temporary Docker images are removed during cleanup.
+
+## Docker Autopeering Suite
+
+Run the Docker autopeering suite with:
+
+```bash
+just test-autopeer
+```
+
+This target also uses `sudo` because it needs Docker access and privileged containers.
+
+### What It Tests
+
+The Docker autopeering suite validates that:
+
+- Two daemons built from this repository can start in separate Docker networks with no shared container network
+- Autopeering can be configured at runtime through `yggdrasilctl` and the admin socket
+- Each daemon fetches and connects to public peers from the built-in autopeer source
+- The two isolated daemons become mutually reachable over the Yggdrasil network
+
+### How It Works
+
+The runner is [tests/compat/run-autopeer.sh](/home/moth/projects/ygg/tests/compat/run-autopeer.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates two fresh JSON configs with admin enabled, no static peers, and autopeer disabled initially.
+3. Starts two privileged containers on two distinct Docker bridge networks so they do not share a direct container network.
+4. Enables runtime autopeering through `yggdrasilctl setAutoPeer`.
+5. Forces an immediate refresh through `yggdrasilctl refreshAutoPeer`.
+6. Waits verbosely for each node to report fetched autopeer candidates and at least one connected runtime peer.
+7. Verifies bidirectional `ping -6` reachability between the two nodes' Yggdrasil IPv6 addresses.
+
+### Prerequisites
+
+The Docker autopeering suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+- Outbound Internet access from Docker containers so public autopeer endpoints can be reached
+
+### Configuration Knobs
+
+The suite is intentionally verbose and can be tuned with environment variables:
+
+- `AUTOPEER_COUNTRIES`
+- `AUTOPEER_SCHEMES`
+- `AUTOPEER_FETCH_INTERVAL`
+- `AUTOPEER_CHECK_INTERVAL`
+- `AUTOPEER_MIN_CONNECTED`
+- `AUTOPEER_MIN_CONNECTED_FROM_FETCH`
+
+### Artifacts
+
+Temporary logs and interface snapshots are written under:
+
+```text
+.tmp/compat-autopeer/
+```
+
+Each run captures:
+
+- Container logs
+- `ip addr` and `ip route` snapshots
+- `yggdrasilctl -json getSelf`
+- `yggdrasilctl -json getPeers`
+- `yggdrasilctl -json getAutoPeer`
+- `yggdrasilctl -json getTun`

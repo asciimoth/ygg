@@ -309,7 +309,7 @@ func main() {
 		}
 		if n.admin != nil {
 			n.admin.SetupCoreHandlers()
-			n.admin.SetupAutoPeerHandlers(n.autopeer, cfg.AutoPeer.Enabled)
+			n.admin.SetupAutoPeerHandlers(admin.NewAutoPeerController(n.autopeer, cfg.AutoPeer.Enabled))
 		}
 	}
 

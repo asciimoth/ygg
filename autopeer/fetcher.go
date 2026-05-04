@@ -211,6 +211,20 @@ func (f *Fetcher) Interval() time.Duration {
 	return f.interval
 }
 
+// SetInterval replaces the periodic fetch interval.
+func (f *Fetcher) SetInterval(interval time.Duration) {
+	if f == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = defaultFetchInterval
+	}
+	f.mu.Lock()
+	f.interval = interval
+	f.mu.Unlock()
+	f.signalWake()
+}
+
 // FetchNow fetches one source immediately, outside the normal periodic order.
 func (f *Fetcher) FetchNow(ctx context.Context, source string) error {
 	if source == BuiltinSource {
