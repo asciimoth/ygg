@@ -10,15 +10,20 @@ NETWORK_NAME="${RUN_ID}-net"
 LOCAL_IMAGE="ygg-transport-local:${RUN_ID}"
 NODE_A_CONT="${RUN_ID}-node-a"
 NODE_B_CONT="${RUN_ID}-node-b"
+SOCKS_CONT="${RUN_ID}-socks"
 
 NODE_A_DIR="${TMP_DIR}/node-a"
 NODE_B_DIR="${TMP_DIR}/node-b"
+SOCKS_DIR="${TMP_DIR}/socks"
 NODE_A_HOST="node-a"
 NODE_B_HOST="node-b"
+SOCKS_HOST="socks"
 NODE_B_LISTEN_PORT="${NODE_B_LISTEN_PORT:-10021}"
+SOCKS_PORT="${SOCKS_PORT:-1080}"
+GOST_IMAGE="${GOST_IMAGE:-gogost/gost:3.2.6}"
 ADMIN_ENDPOINT="unix:///var/run/yggdrasil.sock"
 
-mkdir -p "${NODE_A_DIR}" "${NODE_B_DIR}"
+mkdir -p "${NODE_A_DIR}" "${NODE_B_DIR}" "${SOCKS_DIR}"
 
 log() {
 	printf '==> %s\n' "$*" >&2
@@ -71,7 +76,8 @@ cleanup() {
 	set +e
 	capture_state "${NODE_A_CONT}" "${NODE_A_DIR}" "node-a" || true
 	capture_state "${NODE_B_CONT}" "${NODE_B_DIR}" "node-b" || true
-	docker rm -f "${NODE_A_CONT}" "${NODE_B_CONT}" >/dev/null 2>&1 || true
+	docker logs "${SOCKS_CONT}" >"${SOCKS_DIR}/socks.log" 2>&1 || true
+	docker rm -f "${NODE_A_CONT}" "${NODE_B_CONT}" "${SOCKS_CONT}" >/dev/null 2>&1 || true
 	docker network rm "${NETWORK_NAME}" >/dev/null 2>&1 || true
 	docker image rm -f "${LOCAL_IMAGE}" >/dev/null 2>&1 || true
 	set -e
@@ -190,6 +196,16 @@ start_container() {
 		yggdrasil -useconffile /config/ygg.json -logto stdout -loglevel debug
 }
 
+start_socks_container() {
+	run docker run -d \
+		--name "${SOCKS_CONT}" \
+		--hostname "${SOCKS_HOST}" \
+		--network "${NETWORK_NAME}" \
+		--network-alias "${SOCKS_HOST}" \
+		"${GOST_IMAGE}" \
+		-L "socks5://:${SOCKS_PORT}"
+}
+
 get_self_field() {
 	local cont="$1"
 	local field="$2"
@@ -221,15 +237,18 @@ render_config "${LOCAL_IMAGE}" "" >"${NODE_A_DIR}/ygg.json"
 render_config "${LOCAL_IMAGE}" "tls://0.0.0.0:${NODE_B_LISTEN_PORT}" >"${NODE_B_DIR}/ygg.json"
 
 run docker network create "${NETWORK_NAME}"
+start_socks_container
 start_container "${NODE_A_CONT}" "${NODE_A_HOST}" "${NODE_A_DIR}"
 start_container "${NODE_B_CONT}" "${NODE_B_HOST}" "${NODE_B_DIR}"
 
 wait_for_cmd "${NODE_A_CONT}" "test -S /var/run/yggdrasil.sock"
 wait_for_cmd "${NODE_B_CONT}" "test -S /var/run/yggdrasil.sock"
+wait_for_cmd "${SOCKS_CONT}" "true"
 
 NODE_A_ADDR="$(get_self_field "${NODE_A_CONT}" address)"
 NODE_B_ADDR="$(get_self_field "${NODE_B_CONT}" address)"
 PEER_URI="tls://${NODE_B_HOST}:${NODE_B_LISTEN_PORT}"
+SOCKS_PROXY_URL="socks5://${SOCKS_HOST}:${SOCKS_PORT}"
 
 log "scenario 1: baseline connection over native default network"
 add_peer "${NODE_A_CONT}" "${PEER_URI}"
@@ -269,6 +288,18 @@ wait_for_up_peer_count "${NODE_B_CONT}" 1
 wait_for_ping_success "${NODE_A_CONT}" "${NODE_B_ADDR}"
 
 log "scenario 7: removing the optional mapping disconnects under nil default"
+set_transport "${NODE_A_CONT}" "unset_network_mappings=${NODE_B_HOST}"
+wait_for_up_peer_count "${NODE_A_CONT}" 0
+wait_for_up_peer_count "${NODE_B_CONT}" 0
+wait_for_ping_failure "${NODE_A_CONT}" "${NODE_B_ADDR}"
+
+log "scenario 8: socks-mapped peer reconnects through the local gost proxy"
+set_transport "${NODE_A_CONT}" "network_mappings={\"${NODE_B_HOST}\":{\"type\":\"socks\",\"proxy_url\":\"${SOCKS_PROXY_URL}\"}}"
+wait_for_up_peer_count "${NODE_A_CONT}" 1
+wait_for_up_peer_count "${NODE_B_CONT}" 1
+wait_for_ping_success "${NODE_A_CONT}" "${NODE_B_ADDR}"
+
+log "scenario 9: removing the socks mapping disconnects under nil default"
 set_transport "${NODE_A_CONT}" "unset_network_mappings=${NODE_B_HOST}"
 wait_for_up_peer_count "${NODE_A_CONT}" 0
 wait_for_up_peer_count "${NODE_B_CONT}" 0

@@ -173,6 +173,7 @@ The Docker transport-control suite validates that:
 - Setting the default transport network to `nil` at runtime drops that peering
 - Setting the default transport network back to `native` restores the peering
 - Optional host-pattern transport mappings can be set to `nil`, changed back to `native`, and removed again
+- A host-pattern transport mapping can be changed to a SOCKS network backed by a local `gogost/gost:3.2.6` proxy and reconnect successfully through that proxy
 
 ### How It Works
 
@@ -183,9 +184,10 @@ For each run it:
 1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
 2. Generates fresh JSON configs with admin enabled, one listening daemon, and no static peers in the file.
 3. Starts two privileged containers on an isolated Docker network.
-4. Adds a persistent peer through `yggdrasilctl addPeer` using a hostname so host-pattern transport mappings apply.
-5. Mutates transport-manager state through `yggdrasilctl setTransport`.
-6. Verifies connection loss and recovery with `getPeers` and `ping -6`.
+4. Starts a third container running a local GOST SOCKS5 proxy on the same Docker network.
+5. Adds a persistent peer through `yggdrasilctl addPeer` using a hostname so host-pattern transport mappings apply.
+6. Mutates transport-manager state through `yggdrasilctl setTransport`.
+7. Verifies connection loss and recovery with `getPeers` and `ping -6`, including a reconnection path that requires a SOCKS mapping.
 
 ### Prerequisites
 
@@ -211,3 +213,4 @@ Each run captures:
 - `yggdrasilctl -json getPeers`
 - `yggdrasilctl -json getTransport`
 - `yggdrasilctl -json getTun`
+- GOST proxy logs

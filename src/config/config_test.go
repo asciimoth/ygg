@@ -173,3 +173,38 @@ func TestTransportConfigPreservesExplicitNullAndMappings(t *testing.T) {
 		t.Fatal("expected explicit null mapped network")
 	}
 }
+
+func TestTransportConfigSupportsSocksObjects(t *testing.T) {
+	const raw = `{
+		Transport: {
+			DefaultNetwork: {
+				Type: socks
+				ProxyURL: "socks5://proxy.internal:1080"
+			}
+			NetworkMappings: {
+				"*.onion": {
+					Type: socks
+					ProxyURL: "socks5://tor-proxy:9050"
+				}
+			}
+		}
+	}`
+
+	cfg := GenerateConfig()
+	if err := cfg.UnmarshalHJSON([]byte(raw)); err != nil {
+		t.Fatalf("unmarshal transport config: %v", err)
+	}
+
+	if got := cfg.Transport.DefaultNetwork.Name(); got != "socks" {
+		t.Fatalf("unexpected default transport network %q", got)
+	}
+	if got := cfg.Transport.DefaultNetwork.ProxyURL(); got != "socks5://proxy.internal:1080" {
+		t.Fatalf("unexpected default proxy url %q", got)
+	}
+	if got := cfg.Transport.NetworkMappings["*.onion"].Name(); got != "socks" {
+		t.Fatalf("unexpected mapped network %q", got)
+	}
+	if got := cfg.Transport.NetworkMappings["*.onion"].ProxyURL(); got != "socks5://tor-proxy:9050" {
+		t.Fatalf("unexpected mapped proxy url %q", got)
+	}
+}

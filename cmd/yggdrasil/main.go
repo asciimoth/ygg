@@ -24,6 +24,7 @@ import (
 	"github.com/kardianos/minwinsvc"
 
 	"github.com/asciimoth/ygg/autopeer"
+	"github.com/asciimoth/ygg/internal/transportcfg"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/admin"
 	"github.com/asciimoth/ygg/src/config"
@@ -436,10 +437,7 @@ func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.
 }
 
 func transportNetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Network, error) {
-	if cfg.IsNull() {
-		return nil, nil
-	}
-	return transport.NewBuiltinNetwork(cfg.Name())
+	return transportcfg.NetworkFromConfig(cfg)
 }
 
 func setLogLevel(loglevel string, logger *log.Logger) {

@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/asciimoth/ygg/internal/transportcfg"
 	"github.com/asciimoth/ygg/src/config"
 	"github.com/asciimoth/ygg/transport"
 )
@@ -35,5 +36,27 @@ func TestNewTransportManagerAppliesDefaultAnonymousNetworkBlocks(t *testing.T) {
 		if network != nil {
 			t.Fatalf("expected default transport mapping %q to be nil, got %#v", pattern, network)
 		}
+	}
+}
+
+func TestNewTransportManagerSupportsSocksMappings(t *testing.T) {
+	cfg := config.GenerateConfig()
+	cfg.Transport.DefaultNetwork = config.NullTransportNetworkConfig()
+	cfg.Transport.NetworkMappings["proxy.test"] = config.NewSocksTransportNetworkConfig("socks5://proxy.internal:1080")
+
+	manager, defaultNetwork, err := newTransportManager(cfg)
+	if err != nil {
+		t.Fatalf("newTransportManager: %v", err)
+	}
+	if defaultNetwork != nil {
+		t.Fatalf("expected nil default network, got %T", defaultNetwork)
+	}
+
+	mapped := manager.NetworkMappings()["proxy.test"]
+	if mapped == nil {
+		t.Fatal("expected socks mapping to be configured")
+	}
+	if got := transportcfg.ConfigFromNetwork(mapped); got.Name() != transportcfg.NetworkKindSocks || got.ProxyURL() != "socks5://proxy.internal:1080" {
+		t.Fatalf("unexpected mapped network config: %#v", got)
 	}
 }

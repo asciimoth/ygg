@@ -2,6 +2,7 @@
 snet = "snet"
 nd = "nd"
 sice = "sice"
+gost = "gost"
 
 # legacy typos
 hander= "hander" # ./src/ipv6rwc/ipv6rwc.go:63:42

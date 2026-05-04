@@ -7,6 +7,7 @@ require (
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
 	github.com/asciimoth/gonnect v0.12.0
 	github.com/asciimoth/gonnect-netstack v0.3.15
+	github.com/asciimoth/socksgo v0.2.10
 	github.com/asciimoth/tuntap v0.3.1
 	github.com/gologme/log v1.3.0
 	github.com/hashicorp/go-syslog v1.0.0
@@ -24,16 +25,19 @@ require (
 
 require (
 	github.com/asciimoth/bufpool v0.3.0 // indirect
+	github.com/asciimoth/ident v0.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/coder/websocket v1.8.14 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.2.0 // indirect
 	github.com/olekukonko/ll v0.1.6 // indirect
+	github.com/xtaci/smux v1.5.44 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
 	golang.org/x/time v0.12.0 // indirect
 	gvisor.dev/gvisor v0.0.0-20260325202830-7644cf3a343c // indirect

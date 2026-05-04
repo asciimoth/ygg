@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/asciimoth/ygg/autopeer"
+	"github.com/asciimoth/ygg/internal/transportcfg"
 	"github.com/asciimoth/ygg/src/config"
 	"github.com/asciimoth/ygg/src/core"
 	"github.com/asciimoth/ygg/transport"
@@ -220,11 +221,14 @@ func TestTransportHandlers(t *testing.T) {
 	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transport.NetworkKindNative {
 		t.Fatalf("unexpected initial default network: %#v", getResp.DefaultNetwork)
 	}
+	if got := getResp.DefaultNetworkConfig; got != transport.NetworkKindNative {
+		t.Fatalf("unexpected initial default network config: %#v", got)
+	}
 	assertInitialTransportMappings(t, getResp.NetworkMappings)
 
 	if err := a.setTransportHandler(&SetTransportRequest{
-		DefaultNetwork:       "nil",
-		NetworkMappings:      `{"*.example":"native","disabled.example":null}`,
+		DefaultNetworkConfig: `{"type":"socks","proxy_url":"socks5://proxy.internal:1080"}`,
+		NetworkMappings:      `{"*.example":"native","disabled.example":null,"*.onion":{"type":"socks","proxy_url":"socks5://tor:9050"}}`,
 		UnsetNetworkMappings: "unused.example",
 	}); err != nil {
 		t.Fatalf("setTransportHandler(nil+map): %v", err)
@@ -234,8 +238,11 @@ func TestTransportHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getTransportHandler after set: %v", err)
 	}
-	if getResp.DefaultNetwork != nil {
-		t.Fatalf("expected nil default network, got %#v", getResp.DefaultNetwork)
+	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transportcfg.NetworkKindSocks {
+		t.Fatalf("unexpected socks default network name: %#v", getResp.DefaultNetwork)
+	}
+	if got, ok := getResp.DefaultNetworkConfig.(map[string]any); !ok || got["type"] != "socks" || got["proxy_url"] != "socks5://proxy.internal:1080" {
+		t.Fatalf("unexpected default network config: %#v", getResp.DefaultNetworkConfig)
 	}
 	if got := getResp.NetworkMappings["*.example"]; got == nil || *got != transport.NetworkKindNative {
 		t.Fatalf("unexpected mapped network: %#v", got)
@@ -243,10 +250,16 @@ func TestTransportHandlers(t *testing.T) {
 	if got := getResp.NetworkMappings["disabled.example"]; got != nil {
 		t.Fatalf("expected nil mapped network, got %#v", got)
 	}
+	if got := getResp.NetworkMappings["*.onion"]; got == nil || *got != transportcfg.NetworkKindSocks {
+		t.Fatalf("unexpected socks mapped network: %#v", got)
+	}
+	if got, ok := getResp.NetworkMappingConfigs["*.onion"].(map[string]any); !ok || got["type"] != "socks" || got["proxy_url"] != "socks5://tor:9050" {
+		t.Fatalf("unexpected socks mapped config: %#v", getResp.NetworkMappingConfigs["*.onion"])
+	}
 
 	if err := a.setTransportHandler(&SetTransportRequest{
 		DefaultNetwork:       "unset",
-		UnsetNetworkMappings: "*.example,disabled.example",
+		UnsetNetworkMappings: "*.example,disabled.example,*.onion",
 	}); err != nil {
 		t.Fatalf("setTransportHandler(unset): %v", err)
 	}
@@ -321,9 +334,9 @@ func newAdminTestTransportManager(t *testing.T, cfg *config.NodeConfig) *transpo
 	for pattern, networkCfg := range cfg.Transport.NetworkMappings {
 		var mapped transport.Network
 		if !networkCfg.IsNull() {
-			mapped, err = transport.NewBuiltinNetwork(networkCfg.Name())
+			mapped, err = transportcfg.NetworkFromConfig(networkCfg)
 			if err != nil {
-				t.Fatalf("NewBuiltinNetwork(%s): %v", networkCfg.Name(), err)
+				t.Fatalf("NetworkFromConfig(%s): %v", networkCfg.Name(), err)
 			}
 		}
 		if err := manager.MapNetwork(pattern, mapped); err != nil {

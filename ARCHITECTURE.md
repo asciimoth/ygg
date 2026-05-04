@@ -74,7 +74,8 @@ Construction:
 Daemon default:
 - `cmd/yggdrasil` currently builds the manager from `config.Transport`.
 - If the config does not explicitly override that block, the daemon creates one
-  native default network and no optional host mappings.
+  native default network plus `nil` mappings for `*.tor`, `*.i2p`, and
+  `*.loki`.
 
 Important internals:
 - `Core.PacketConn`: Ironwood encrypted packet router (`encrypted.PacketConn`)
@@ -166,6 +167,9 @@ Behavior:
   installs `nil` host mappings for `*.tor`, `*.i2p`, and `*.loki`, so those
   peers stay disabled unless a config file or admin API call maps them to a
   real network.
+- The daemon layers an additional runtime network resolver on top of the
+  transport package so config and admin can also create SOCKS-backed networks
+  from objects such as `{type:"socks", proxy_url:"socks5://proxy:1080"}`.
 - Closes all affected listeners, accepted children, and dialed connections when
   a mapping changes so no resource survives on the wrong network.
 - Treats `Options.SourceInterface` as a best-effort hint in the built-in TCP

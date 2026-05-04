@@ -290,7 +290,7 @@ func (a *AdminSocket) SetupCoreHandlers() {
 	)
 	_ = a.AddHandler(
 		"setTransport", "Update runtime transport manager networks", []string{
-			"default_network", "network_mappings", "unset_network_mappings",
+			"default_network", "default_network_config", "network_mappings", "unset_network_mappings",
 		},
 		func(in json.RawMessage) (interface{}, error) {
 			req := &SetTransportRequest{}
