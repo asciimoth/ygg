@@ -50,6 +50,7 @@ type NodeConfig struct {
 	AdminListen         string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
 	MulticastInterfaces []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
 	AllowedPublicKeys   []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
+	Transport           TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and no additional host-based\nnetwork mappings. Set DefaultNetwork to null to disable the default\nnetwork entirely. Set a NetworkMappings entry to null to keep the\nmapping but disable its network. The only supported non-null value\ntoday is \"native\"."`
 	AutoPeer            AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
 	IfName              string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
 	IfMTU               uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
@@ -67,6 +68,17 @@ type AutoPeerConfig struct {
 	MinimumConnectedFromFetch int      `comment:"Minimum number of connected peers whose URIs are present in the\nfiltered autopeer source set before autopeering remains idle."`
 	Countries                 []string `comment:"Optional country filters for peer selection, matched case-insensitively\nagainst public-peer metadata."`
 	TransportSchemes          []string `comment:"Transport scheme filters for peer selection, e.g. [\"tcp\", \"tls\"].\nAutopeering stays idle unless both this and Countries are configured."`
+}
+
+type TransportConfig struct {
+	DefaultNetwork  TransportNetworkConfig            `json:",omitempty" comment:"Default gonnect.Network used for transport hosts that do not match\nany optional host pattern in NetworkMappings. Set this to null to\nmake unmatched transport connections unavailable. The only supported\nnon-null value today is \"native\"."`
+	NetworkMappings map[string]TransportNetworkConfig `json:",omitempty" comment:"Optional host-pattern to gonnect.Network overrides for transport\nconnections. Patterns use the same matching rules as transport.Manager,\nfor example \"*.example\" or \"node.example\". Set a value to null to\nkeep the mapping but disable its network. Remove the entry entirely to\nunset the mapping. The only supported non-null value today is \"native\"."`
+}
+
+type TransportNetworkConfig struct {
+	set  bool
+	null bool
+	name string
 }
 
 type MulticastInterfaceConfig struct {
@@ -92,6 +104,10 @@ func GenerateConfig() *NodeConfig {
 	cfg.Peers = []string{}
 	cfg.InterfacePeers = map[string][]string{}
 	cfg.AllowedPublicKeys = []string{}
+	cfg.Transport = TransportConfig{
+		DefaultNetwork:  NewTransportNetworkConfig("native"),
+		NetworkMappings: map[string]TransportNetworkConfig{},
+	}
 	cfg.AutoPeer = AutoPeerConfig{
 		Sources:       []string{"BUILTIN"},
 		FetchInterval: "1h",
@@ -145,6 +161,7 @@ func (cfg *NodeConfig) UnmarshalHJSON(b []byte) error {
 }
 
 func (cfg *NodeConfig) postprocessConfig() error {
+	cfg.Transport.normalize()
 	if err := cfg.AutoPeer.normalize(); err != nil {
 		return err
 	}
@@ -171,6 +188,73 @@ func (cfg *NodeConfig) postprocessConfig() error {
 		}
 	}
 	return nil
+}
+
+func NewTransportNetworkConfig(name string) TransportNetworkConfig {
+	return TransportNetworkConfig{
+		set:  true,
+		name: strings.ToLower(strings.TrimSpace(name)),
+	}
+}
+
+func NullTransportNetworkConfig() TransportNetworkConfig {
+	return TransportNetworkConfig{
+		set:  true,
+		null: true,
+	}
+}
+
+func (cfg TransportNetworkConfig) IsSet() bool {
+	return cfg.set
+}
+
+func (cfg TransportNetworkConfig) IsNull() bool {
+	return cfg.set && cfg.null
+}
+
+func (cfg TransportNetworkConfig) Name() string {
+	return cfg.name
+}
+
+func (cfg *TransportNetworkConfig) UnmarshalJSON(b []byte) error {
+	if bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
+		*cfg = NullTransportNetworkConfig()
+		return nil
+	}
+
+	var name string
+	if err := json.Unmarshal(b, &name); err != nil {
+		return err
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return fmt.Errorf("transport network must not be empty")
+	}
+
+	*cfg = NewTransportNetworkConfig(name)
+	return nil
+}
+
+func (cfg TransportNetworkConfig) MarshalJSON() ([]byte, error) {
+	if cfg.null {
+		return []byte("null"), nil
+	}
+	return json.Marshal(cfg.name)
+}
+
+func (cfg *TransportConfig) normalize() {
+	if cfg.NetworkMappings == nil {
+		cfg.NetworkMappings = map[string]TransportNetworkConfig{}
+	}
+	cfg.DefaultNetwork.name = strings.ToLower(strings.TrimSpace(cfg.DefaultNetwork.name))
+	for pattern, network := range cfg.NetworkMappings {
+		if network.null {
+			cfg.NetworkMappings[pattern] = NullTransportNetworkConfig()
+			continue
+		}
+		network.name = strings.ToLower(strings.TrimSpace(network.name))
+		cfg.NetworkMappings[pattern] = network
+	}
 }
 
 func (cfg *AutoPeerConfig) normalize() error {

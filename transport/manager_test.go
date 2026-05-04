@@ -229,6 +229,43 @@ func TestManagerSetDefaultNetworkClosesDefaultResources(t *testing.T) {
 	assertClosed(t, server)
 }
 
+func TestManagerAccessorsAndBuiltinNetworks(t *testing.T) {
+	t.Parallel()
+
+	defaultNet, err := NewBuiltinNetwork(NetworkKindNative)
+	if err != nil {
+		t.Fatalf("NewBuiltinNetwork(native): %v", err)
+	}
+	mappedNet, err := NewBuiltinNetwork(NetworkKindNative)
+	if err != nil {
+		t.Fatalf("NewBuiltinNetwork(native mapped): %v", err)
+	}
+
+	m := NewManager(defaultNet)
+	if err := m.MapNetwork("*.example", mappedNet); err != nil {
+		t.Fatalf("MapNetwork: %v", err)
+	}
+
+	if got := m.DefaultNetwork(); got != defaultNet {
+		t.Fatal("default network accessor returned unexpected instance")
+	}
+	mappings := m.NetworkMappings()
+	if got := mappings["*.example"]; got != mappedNet {
+		t.Fatal("network mappings accessor returned unexpected instance")
+	}
+	delete(mappings, "*.example")
+	if len(m.NetworkMappings()) != 1 {
+		t.Fatal("network mappings accessor should return a copy")
+	}
+
+	if name, ok := BuiltinNetworkName(defaultNet); !ok || name != NetworkKindNative {
+		t.Fatalf("unexpected builtin network name: %q %v", name, ok)
+	}
+	if _, err := NewBuiltinNetwork("nope"); !errors.Is(err, ErrUnsupportedNetwork) {
+		t.Fatalf("expected ErrUnsupportedNetwork, got %v", err)
+	}
+}
+
 func TestManagerRegisterAcceptedConnRejectsUnknownParent(t *testing.T) {
 	t.Parallel()
 

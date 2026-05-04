@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/asciimoth/gonnect"
+	"github.com/asciimoth/gonnect/native"
 )
 
 const defaultMappingKey = ""
@@ -24,6 +25,11 @@ var (
 	ErrNilTransport               = errors.New("transport is nil")
 	ErrInvalidPattern             = errors.New("transport network pattern is invalid")
 	ErrSourceInterfaceUnsupported = errors.New("transport source interface is not supported by selected network")
+	ErrUnsupportedNetwork         = errors.New("transport network is not supported")
+)
+
+const (
+	NetworkKindNative = "native"
 )
 
 type Conn = net.Conn
@@ -205,6 +211,22 @@ func (m *Manager) HasTransport(scheme string) bool {
 	}
 	_, ok := m.transports[normalizeScheme(scheme)]
 	return ok
+}
+
+func (m *Manager) DefaultNetwork() Network {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.defaultNet
+}
+
+func (m *Manager) NetworkMappings() map[string]Network {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]Network, len(m.mappings))
+	for pattern, network := range m.mappings {
+		out[pattern] = network
+	}
+	return out
 }
 
 func (m *Manager) SetDefaultNetwork(network Network) {
@@ -567,6 +589,28 @@ func (l *trackedListener) Close() error {
 func closeAll(closers []io.Closer) {
 	for _, closer := range closers {
 		_ = closer.Close()
+	}
+}
+
+func NewBuiltinNetwork(kind string) (Network, error) {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case NetworkKindNative:
+		network := &native.Network{}
+		if err := network.Up(); err != nil {
+			return nil, err
+		}
+		return network, nil
+	default:
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedNetwork, kind)
+	}
+}
+
+func BuiltinNetworkName(network Network) (string, bool) {
+	switch network.(type) {
+	case *native.Network:
+		return NetworkKindNative, true
+	default:
+		return "", false
 	}
 }
 

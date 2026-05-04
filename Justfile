@@ -16,3 +16,7 @@ test-compat:
 # Docker-based public autopeering test between two isolated local daemons. Uses sudo.
 test-autopeer:
 	sudo ./tests/compat/run-autopeer.sh
+
+# Docker-based transport-manager control test between two local daemons. Uses sudo.
+test-transport:
+	sudo ./tests/compat/run-transport.sh

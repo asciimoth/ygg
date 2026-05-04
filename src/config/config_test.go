@@ -96,6 +96,12 @@ func TestExampleConfigIncludesAutoPeer(t *testing.T) {
 	if cfg.AutoPeer.FetchInterval != "1h" || cfg.AutoPeer.CheckInterval != "1m" {
 		t.Fatalf("unexpected example autopeer intervals: fetch=%q check=%q", cfg.AutoPeer.FetchInterval, cfg.AutoPeer.CheckInterval)
 	}
+	if cfg.Transport.DefaultNetwork.Name() != "native" || cfg.Transport.DefaultNetwork.IsNull() {
+		t.Fatalf("unexpected example default transport network: %#v", cfg.Transport.DefaultNetwork)
+	}
+	if len(cfg.Transport.NetworkMappings) != 0 {
+		t.Fatalf("unexpected example transport mappings: %#v", cfg.Transport.NetworkMappings)
+	}
 }
 
 func TestAutoPeerConfigRejectsInvalidDuration(t *testing.T) {
@@ -103,5 +109,49 @@ func TestAutoPeerConfigRejectsInvalidDuration(t *testing.T) {
 	cfg.AutoPeer.FetchInterval = "nope"
 	if err := cfg.postprocessConfig(); err == nil {
 		t.Fatal("expected invalid autopeer fetch interval to fail")
+	}
+}
+
+func TestGenerateConfigTransportDefaults(t *testing.T) {
+	cfg := GenerateConfig()
+
+	if !cfg.Transport.DefaultNetwork.IsSet() {
+		t.Fatal("expected default transport network to be set")
+	}
+	if cfg.Transport.DefaultNetwork.IsNull() {
+		t.Fatal("expected default transport network to be non-null")
+	}
+	if cfg.Transport.DefaultNetwork.Name() != "native" {
+		t.Fatalf("unexpected default transport network %q", cfg.Transport.DefaultNetwork.Name())
+	}
+	if len(cfg.Transport.NetworkMappings) != 0 {
+		t.Fatalf("unexpected default transport mappings: %#v", cfg.Transport.NetworkMappings)
+	}
+}
+
+func TestTransportConfigPreservesExplicitNullAndMappings(t *testing.T) {
+	const raw = `{
+		Transport: {
+			DefaultNetwork: null
+			NetworkMappings: {
+				"*.example": native
+				"disabled.example": null
+			}
+		}
+	}`
+
+	cfg := GenerateConfig()
+	if err := cfg.UnmarshalHJSON([]byte(raw)); err != nil {
+		t.Fatalf("unmarshal transport config: %v", err)
+	}
+
+	if !cfg.Transport.DefaultNetwork.IsNull() {
+		t.Fatal("expected explicit null default transport network")
+	}
+	if got := cfg.Transport.NetworkMappings["*.example"].Name(); got != "native" {
+		t.Fatalf("unexpected mapped network %q", got)
+	}
+	if !cfg.Transport.NetworkMappings["disabled.example"].IsNull() {
+		t.Fatal("expected explicit null mapped network")
 	}
 }

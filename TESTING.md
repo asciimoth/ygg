@@ -5,6 +5,7 @@ This repository has three main test layers:
 - Fast package tests with `go test ./... --race`
 - A Linux Docker compatibility suite that runs this fork against pinned upstream `yggdrasil-go`
 - A Linux Docker public-autopeering suite that validates runtime autopeer setup through the admin API
+- A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
 
 ## Standard Checks
 
@@ -152,4 +153,61 @@ Each run captures:
 - `yggdrasilctl -json getSelf`
 - `yggdrasilctl -json getPeers`
 - `yggdrasilctl -json getAutoPeer`
+- `yggdrasilctl -json getTun`
+
+## Docker Transport-Control Suite
+
+Run the Docker transport-control suite with:
+
+```bash
+just test-transport
+```
+
+This target also uses `sudo` because it needs Docker access and privileged containers.
+
+### What It Tests
+
+The Docker transport-control suite validates that:
+
+- Two daemons built from this repository can connect over a configured persistent TLS peer
+- Setting the default transport network to `nil` at runtime drops that peering
+- Setting the default transport network back to `native` restores the peering
+- Optional host-pattern transport mappings can be set to `nil`, changed back to `native`, and removed again
+
+### How It Works
+
+The runner is [tests/compat/run-transport.sh](/home/moth/projects/ygg/tests/compat/run-transport.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates fresh JSON configs with admin enabled, one listening daemon, and no static peers in the file.
+3. Starts two privileged containers on an isolated Docker network.
+4. Adds a persistent peer through `yggdrasilctl addPeer` using a hostname so host-pattern transport mappings apply.
+5. Mutates transport-manager state through `yggdrasilctl setTransport`.
+6. Verifies connection loss and recovery with `getPeers` and `ping -6`.
+
+### Prerequisites
+
+The Docker transport-control suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+
+### Artifacts
+
+Temporary logs and interface snapshots are written under:
+
+```text
+.tmp/compat-transport/
+```
+
+Each run captures:
+
+- Container logs
+- `ip addr` and `ip route` snapshots
+- `yggdrasilctl -json getSelf`
+- `yggdrasilctl -json getPeers`
+- `yggdrasilctl -json getTransport`
 - `yggdrasilctl -json getTun`

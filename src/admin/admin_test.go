@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -8,6 +9,9 @@ import (
 	"time"
 
 	"github.com/asciimoth/ygg/autopeer"
+	"github.com/asciimoth/ygg/src/config"
+	"github.com/asciimoth/ygg/src/core"
+	"github.com/asciimoth/ygg/transport"
 )
 
 type testLogger struct{}
@@ -201,6 +205,101 @@ func TestAutoPeerControllerApply(t *testing.T) {
 	}
 }
 
+func TestTransportHandlers(t *testing.T) {
+	a := &AdminSocket{
+		core:     newAdminTestCore(t),
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	a.SetupCoreHandlers()
+
+	getResp, err := a.getTransportHandler()
+	if err != nil {
+		t.Fatalf("getTransportHandler: %v", err)
+	}
+	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transport.NetworkKindNative {
+		t.Fatalf("unexpected initial default network: %#v", getResp.DefaultNetwork)
+	}
+	if len(getResp.NetworkMappings) != 0 {
+		t.Fatalf("unexpected initial transport mappings: %#v", getResp.NetworkMappings)
+	}
+
+	if err := a.setTransportHandler(&SetTransportRequest{
+		DefaultNetwork:       "nil",
+		NetworkMappings:      `{"*.example":"native","disabled.example":null}`,
+		UnsetNetworkMappings: "unused.example",
+	}); err != nil {
+		t.Fatalf("setTransportHandler(nil+map): %v", err)
+	}
+
+	getResp, err = a.getTransportHandler()
+	if err != nil {
+		t.Fatalf("getTransportHandler after set: %v", err)
+	}
+	if getResp.DefaultNetwork != nil {
+		t.Fatalf("expected nil default network, got %#v", getResp.DefaultNetwork)
+	}
+	if got := getResp.NetworkMappings["*.example"]; got == nil || *got != transport.NetworkKindNative {
+		t.Fatalf("unexpected mapped network: %#v", got)
+	}
+	if got := getResp.NetworkMappings["disabled.example"]; got != nil {
+		t.Fatalf("expected nil mapped network, got %#v", got)
+	}
+
+	if err := a.setTransportHandler(&SetTransportRequest{
+		DefaultNetwork:       "unset",
+		UnsetNetworkMappings: "*.example,disabled.example",
+	}); err != nil {
+		t.Fatalf("setTransportHandler(unset): %v", err)
+	}
+
+	getResp, err = a.getTransportHandler()
+	if err != nil {
+		t.Fatalf("getTransportHandler after unset: %v", err)
+	}
+	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transport.NetworkKindNative {
+		t.Fatalf("unexpected restored default network: %#v", getResp.DefaultNetwork)
+	}
+	if len(getResp.NetworkMappings) != 0 {
+		t.Fatalf("expected mappings to be removed, got %#v", getResp.NetworkMappings)
+	}
+}
+
 type autopeerTestLogger struct{}
 
 func (*autopeerTestLogger) Printf(string, ...interface{}) {}
+
+func newAdminTestCore(t *testing.T) *core.Core {
+	t.Helper()
+
+	cfg := config.GenerateConfig()
+	manager := newAdminTestTransportManager(t, cfg.Certificate)
+	node, err := core.New(cfg.Certificate, testLogger{}, core.TransportManager{Manager: manager})
+	if err != nil {
+		t.Fatalf("core.New: %v", err)
+	}
+	t.Cleanup(node.Stop)
+	return node
+}
+
+func newAdminTestTransportManager(t *testing.T, cert *tls.Certificate) *transport.Manager {
+	t.Helper()
+
+	network, err := transport.NewBuiltinNetwork(transport.NetworkKindNative)
+	if err != nil {
+		t.Fatalf("NewBuiltinNetwork: %v", err)
+	}
+	manager := transport.NewManager(network)
+	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
+		t.Fatalf("RegisterTransport(tcp): %v", err)
+	}
+	tlsConfig, err := core.GenerateTLSConfig(cert)
+	if err != nil {
+		t.Fatalf("GenerateTLSConfig: %v", err)
+	}
+	if err := manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
+		t.Fatalf("RegisterTransport(tls): %v", err)
+	}
+	return manager
+}

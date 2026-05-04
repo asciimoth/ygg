@@ -44,6 +44,8 @@ Key outputs consumed by other packages:
 - `Certificate` for `core.New`
 - `Peers`, `InterfacePeers`, `Listen` for link setup
 - `AllowedPublicKeys`, `NodeInfo`, `NodeInfoPrivacy`
+- `Transport.DefaultNetwork`, `Transport.NetworkMappings` for daemon-managed
+  `transport.Manager` construction
 - `AdminListen`
 - `MulticastInterfaces`
 - `IfName`, `IfMTU` for daemon-owned native TUN setup
@@ -68,6 +70,11 @@ Construction:
   transports on behalf of the caller.
 - The embedding application is responsible for deciding which carrier schemes
   exist and which `gonnect.Network` instances they use before starting `core`.
+
+Daemon default:
+- `cmd/yggdrasil` currently builds the manager from `config.Transport`.
+- If the config does not explicitly override that block, the daemon creates one
+  native default network and no optional host mappings.
 
 Important internals:
 - `Core.PacketConn`: Ironwood encrypted packet router (`encrypted.PacketConn`)
@@ -151,6 +158,10 @@ Behavior:
   unrelated parameters remain available to higher layers.
 - Rejects operations when the selected network mapping is `nil`.
 - Supports live `SetDefaultNetwork`, `MapNetwork`, and `UnmapNetwork` updates.
+- Exposes accessor helpers so higher layers can inspect the current default
+  network and host-pattern mappings.
+- Provides a small built-in network factory currently supporting `native`, so
+  daemon and admin code can create the same network kind consistently.
 - Closes all affected listeners, accepted children, and dialed connections when
   a mapping changes so no resource survives on the wrong network.
 - Treats `Options.SourceInterface` as a best-effort hint in the built-in TCP
@@ -236,6 +247,8 @@ Behavior:
 - Listens on UNIX or TCP depending on configuration.
 - Accepts JSON requests of the form `{request, arguments, keepalive}`.
 - Dispatches to registered handlers and returns JSON responses.
+- Exposes `getTransport` and `setTransport` for inspecting and mutating the
+  runtime `transport.Manager` used by `core`.
 
 Dependency boundary:
 - `src/admin` depends on `src/core` and may also adapt optional runtime

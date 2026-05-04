@@ -283,6 +283,27 @@ func (a *AdminSocket) SetupCoreHandlers() {
 		},
 	)
 	_ = a.AddHandler(
+		"getTransport", "Show transport manager network configuration", []string{},
+		func(_ json.RawMessage) (interface{}, error) {
+			return a.getTransportHandler()
+		},
+	)
+	_ = a.AddHandler(
+		"setTransport", "Update runtime transport manager networks", []string{
+			"default_network", "network_mappings", "unset_network_mappings",
+		},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &SetTransportRequest{}
+			if err := json.Unmarshal(in, req); err != nil {
+				return nil, err
+			}
+			if err := a.setTransportHandler(req); err != nil {
+				return nil, err
+			}
+			return a.getTransportHandler()
+		},
+	)
+	_ = a.AddHandler(
 		"addPeer", "Add a peer to the peer list", []string{"uri", "interface"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := &AddPeerRequest{}

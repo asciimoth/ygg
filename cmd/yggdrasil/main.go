@@ -23,7 +23,6 @@ import (
 	"github.com/hjson/hjson-go/v4"
 	"github.com/kardianos/minwinsvc"
 
-	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/ygg/autopeer"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/admin"
@@ -217,19 +216,8 @@ func main() {
 
 	// Set up the Yggdrasil node itself.
 	{
-		network := &native.Network{}
-		if err = network.Up(); err != nil {
-			panic(err)
-		}
-		manager := transport.NewManager(network)
-		if err = manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
-			panic(err)
-		}
-		tlsConfig, err := core.GenerateTLSConfig(cfg.Certificate)
+		manager, defaultNetwork, err := newTransportManager(cfg)
 		if err != nil {
-			panic(err)
-		}
-		if err = manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
 			panic(err)
 		}
 
@@ -280,7 +268,7 @@ func main() {
 			panic(err)
 		}
 		fetcher := autopeer.NewFetcher(logger, fetchInterval)
-		fetcher.SetDefaultNetwork(network)
+		fetcher.SetDefaultNetwork(defaultNetwork)
 		fetcher.SetSources(cfg.AutoPeer.Sources)
 		n.autopeer = autopeer.NewManager(fetcher)
 		n.autopeer.SetPeerManager(n.core)
@@ -414,6 +402,44 @@ func main() {
 	_ = n.multicast.Stop()
 	_ = n.tun.Stop()
 	n.core.Stop()
+}
+
+func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.Network, error) {
+	defaultNetwork, err := transportNetworkFromConfig(cfg.Transport.DefaultNetwork)
+	if err != nil {
+		return nil, nil, fmt.Errorf("default transport network: %w", err)
+	}
+
+	manager := transport.NewManager(defaultNetwork)
+	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
+		return nil, nil, err
+	}
+	tlsConfig, err := core.GenerateTLSConfig(cfg.Certificate)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
+		return nil, nil, err
+	}
+
+	for pattern, networkCfg := range cfg.Transport.NetworkMappings {
+		network, err := transportNetworkFromConfig(networkCfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("transport network mapping %q: %w", pattern, err)
+		}
+		if err := manager.MapNetwork(pattern, network); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return manager, defaultNetwork, nil
+}
+
+func transportNetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Network, error) {
+	if cfg.IsNull() {
+		return nil, nil
+	}
+	return transport.NewBuiltinNetwork(cfg.Name())
 }
 
 func setLogLevel(loglevel string, logger *log.Logger) {
