@@ -10,15 +10,17 @@ At runtime, the system is composed as:
 1. `config` loads or generates node configuration and identity material.
 2. `transport` provides pluggable carrier transports and host-scoped
    `gonnect.Network` selection for connection setup.
-3. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
-4. `admin` exposes a local control API over TCP or UNIX sockets.
+3. `autopeer` fetches public peer lists from one or more external sources and
+   maintains a runtime candidate set for future autopeering logic.
+4. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
+5. `admin` exposes a local control API over TCP or UNIX sockets.
    The daemon wires admin adapters to `core`, `multicast`, and `tun` at
    startup time.
-5. `multicast` optionally discovers local peers and feeds them back into
+6. `multicast` optionally discovers local peers and feeds them back into
    `core` through a small runtime adapter.
-6. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
-7. `tun` supervises a runtime attachment for that IPv6 packet stream.
-8. `tunnative` provides OS-specific native TUN creation/configuration for the
+7. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
+8. `tun` supervises a runtime attachment for that IPv6 packet stream.
+9. `tunnative` provides OS-specific native TUN creation/configuration for the
    daemon.
 
 `cmd/yggdrasil` is the composition root. It wires the packages together but
@@ -162,6 +164,35 @@ Current built-in transport implementations in this repository:
 The transport package intentionally does not implement peer reconnection,
 timeouts, password protection, or Yggdrasil handshakes. Those concerns stay in
 higher layers such as `core`.
+
+### `autopeer`
+
+Purpose:
+- Fetch public peer documents from one or more configured source URLs.
+- Support one default `gonnect.Network` plus optional source-specific network
+  overrides.
+- Keep an aggregated, thread-safe snapshot of candidate peers for higher
+  layers.
+
+Main types:
+- `autopeer.Fetcher`
+- `autopeer.Manager`
+
+Behavior:
+- Treats sources as an ordered list of document URLs plus the special
+  `BUILTIN` source.
+- Periodically fetches non-built-in sources one by one, using the effective
+  `gonnect.Network` for each source.
+- Skips network fetches for sources whose effective network is `nil`, and drops
+  their contributed peers from the aggregate so stale data is not retained.
+- Loads `BUILTIN` immediately from generated embedded data and never refreshes
+  it over the network.
+- Logs fetch and parse failures without interrupting other sources.
+
+Current boundary:
+- `autopeer` does not depend on `src/core` yet.
+- It is implemented as a standalone candidate-peer discovery module so daemon
+  wiring can be added later without pulling source-fetching logic into `core`.
 
 #### Protocol subsystem
 

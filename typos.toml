@@ -7,5 +7,8 @@ sice = "sice"
 hander= "hander" # ./src/ipv6rwc/ipv6rwc.go:63:42
 
 [files]
-extend-exclude = ["*_test.go"]
+extend-exclude = [
+  "*_test.go",
+  "autopeer/builtin_peers_generated.json",
+]
 
