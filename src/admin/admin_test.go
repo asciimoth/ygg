@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -221,9 +220,7 @@ func TestTransportHandlers(t *testing.T) {
 	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transport.NetworkKindNative {
 		t.Fatalf("unexpected initial default network: %#v", getResp.DefaultNetwork)
 	}
-	if len(getResp.NetworkMappings) != 0 {
-		t.Fatalf("unexpected initial transport mappings: %#v", getResp.NetworkMappings)
-	}
+	assertInitialTransportMappings(t, getResp.NetworkMappings)
 
 	if err := a.setTransportHandler(&SetTransportRequest{
 		DefaultNetwork:       "nil",
@@ -261,8 +258,28 @@ func TestTransportHandlers(t *testing.T) {
 	if getResp.DefaultNetwork == nil || *getResp.DefaultNetwork != transport.NetworkKindNative {
 		t.Fatalf("unexpected restored default network: %#v", getResp.DefaultNetwork)
 	}
-	if len(getResp.NetworkMappings) != 0 {
-		t.Fatalf("expected mappings to be removed, got %#v", getResp.NetworkMappings)
+	assertInitialTransportMappings(t, getResp.NetworkMappings)
+}
+
+func assertInitialTransportMappings(t *testing.T, mappings map[string]*string) {
+	t.Helper()
+
+	want := map[string]struct{}{
+		"*.tor":  {},
+		"*.i2p":  {},
+		"*.loki": {},
+	}
+	if len(mappings) != len(want) {
+		t.Fatalf("unexpected initial transport mappings: %#v", mappings)
+	}
+	for pattern := range want {
+		value, ok := mappings[pattern]
+		if !ok {
+			t.Fatalf("missing initial transport mapping for %q: %#v", pattern, mappings)
+		}
+		if value != nil {
+			t.Fatalf("expected initial transport mapping %q to be nil, got %#v", pattern, value)
+		}
 	}
 }
 
@@ -274,7 +291,7 @@ func newAdminTestCore(t *testing.T) *core.Core {
 	t.Helper()
 
 	cfg := config.GenerateConfig()
-	manager := newAdminTestTransportManager(t, cfg.Certificate)
+	manager := newAdminTestTransportManager(t, cfg)
 	node, err := core.New(cfg.Certificate, testLogger{}, core.TransportManager{Manager: manager})
 	if err != nil {
 		t.Fatalf("core.New: %v", err)
@@ -283,7 +300,7 @@ func newAdminTestCore(t *testing.T) *core.Core {
 	return node
 }
 
-func newAdminTestTransportManager(t *testing.T, cert *tls.Certificate) *transport.Manager {
+func newAdminTestTransportManager(t *testing.T, cfg *config.NodeConfig) *transport.Manager {
 	t.Helper()
 
 	network, err := transport.NewBuiltinNetwork(transport.NetworkKindNative)
@@ -294,12 +311,24 @@ func newAdminTestTransportManager(t *testing.T, cert *tls.Certificate) *transpor
 	if err := manager.RegisterTransport(transport.NewTCPTransport()); err != nil {
 		t.Fatalf("RegisterTransport(tcp): %v", err)
 	}
-	tlsConfig, err := core.GenerateTLSConfig(cert)
+	tlsConfig, err := core.GenerateTLSConfig(cfg.Certificate)
 	if err != nil {
 		t.Fatalf("GenerateTLSConfig: %v", err)
 	}
 	if err := manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
 		t.Fatalf("RegisterTransport(tls): %v", err)
+	}
+	for pattern, networkCfg := range cfg.Transport.NetworkMappings {
+		var mapped transport.Network
+		if !networkCfg.IsNull() {
+			mapped, err = transport.NewBuiltinNetwork(networkCfg.Name())
+			if err != nil {
+				t.Fatalf("NewBuiltinNetwork(%s): %v", networkCfg.Name(), err)
+			}
+		}
+		if err := manager.MapNetwork(pattern, mapped); err != nil {
+			t.Fatalf("MapNetwork(%s): %v", pattern, err)
+		}
 	}
 	return manager
 }

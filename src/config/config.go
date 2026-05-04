@@ -50,7 +50,7 @@ type NodeConfig struct {
 	AdminListen         string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
 	MulticastInterfaces []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
 	AllowedPublicKeys   []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
-	Transport           TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and no additional host-based\nnetwork mappings. Set DefaultNetwork to null to disable the default\nnetwork entirely. Set a NetworkMappings entry to null to keep the\nmapping but disable its network. The only supported non-null value\ntoday is \"native\"."`
+	Transport           TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.tor, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. The only\nsupported non-null value today is \"native\"."`
 	AutoPeer            AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
 	IfName              string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
 	IfMTU               uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
@@ -72,7 +72,7 @@ type AutoPeerConfig struct {
 
 type TransportConfig struct {
 	DefaultNetwork  TransportNetworkConfig            `json:",omitempty" comment:"Default gonnect.Network used for transport hosts that do not match\nany optional host pattern in NetworkMappings. Set this to null to\nmake unmatched transport connections unavailable. The only supported\nnon-null value today is \"native\"."`
-	NetworkMappings map[string]TransportNetworkConfig `json:",omitempty" comment:"Optional host-pattern to gonnect.Network overrides for transport\nconnections. Patterns use the same matching rules as transport.Manager,\nfor example \"*.example\" or \"node.example\". Set a value to null to\nkeep the mapping but disable its network. Remove the entry entirely to\nunset the mapping. The only supported non-null value today is \"native\"."`
+	NetworkMappings map[string]TransportNetworkConfig `json:",omitempty" comment:"Optional host-pattern to gonnect.Network overrides for transport\nconnections. Patterns use the same matching rules as transport.Manager,\nfor example \"*.example\" or \"node.example\". Default config installs\nnil mappings for *.tor, *.i2p and *.loki so those peers are blocked\nunless you explicitly assign a network. Set a value to null to keep\nthe mapping but disable its network. Remove the entry entirely to\nunset the mapping. The only supported non-null value today is \"native\"."`
 }
 
 type TransportNetworkConfig struct {
@@ -106,7 +106,7 @@ func GenerateConfig() *NodeConfig {
 	cfg.AllowedPublicKeys = []string{}
 	cfg.Transport = TransportConfig{
 		DefaultNetwork:  NewTransportNetworkConfig("native"),
-		NetworkMappings: map[string]TransportNetworkConfig{},
+		NetworkMappings: defaultTransportNetworkMappings(),
 	}
 	cfg.AutoPeer = AutoPeerConfig{
 		Sources:       []string{"BUILTIN"},
@@ -292,6 +292,14 @@ func normalizeStringSlice(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func defaultTransportNetworkMappings() map[string]TransportNetworkConfig {
+	return map[string]TransportNetworkConfig{
+		"*.i2p":  NullTransportNetworkConfig(),
+		"*.loki": NullTransportNetworkConfig(),
+		"*.tor":  NullTransportNetworkConfig(),
+	}
 }
 
 // RFC5280 section 4.1.2.5

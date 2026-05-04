@@ -8,6 +8,28 @@ import (
 	"github.com/asciimoth/ygg/autopeer"
 )
 
+func assertDefaultTransportMappings(t *testing.T, mappings map[string]TransportNetworkConfig) {
+	t.Helper()
+
+	want := map[string]struct{}{
+		"*.tor":  {},
+		"*.i2p":  {},
+		"*.loki": {},
+	}
+	if len(mappings) != len(want) {
+		t.Fatalf("unexpected transport mappings: %#v", mappings)
+	}
+	for pattern := range want {
+		mapping, ok := mappings[pattern]
+		if !ok {
+			t.Fatalf("missing default transport mapping for %q: %#v", pattern, mappings)
+		}
+		if !mapping.IsNull() {
+			t.Fatalf("expected default transport mapping %q to be null, got %#v", pattern, mapping)
+		}
+	}
+}
+
 func TestConfig_Keys(t *testing.T) {
 	/*
 		var nodeConfig NodeConfig
@@ -99,9 +121,7 @@ func TestExampleConfigIncludesAutoPeer(t *testing.T) {
 	if cfg.Transport.DefaultNetwork.Name() != "native" || cfg.Transport.DefaultNetwork.IsNull() {
 		t.Fatalf("unexpected example default transport network: %#v", cfg.Transport.DefaultNetwork)
 	}
-	if len(cfg.Transport.NetworkMappings) != 0 {
-		t.Fatalf("unexpected example transport mappings: %#v", cfg.Transport.NetworkMappings)
-	}
+	assertDefaultTransportMappings(t, cfg.Transport.NetworkMappings)
 }
 
 func TestAutoPeerConfigRejectsInvalidDuration(t *testing.T) {
@@ -124,9 +144,7 @@ func TestGenerateConfigTransportDefaults(t *testing.T) {
 	if cfg.Transport.DefaultNetwork.Name() != "native" {
 		t.Fatalf("unexpected default transport network %q", cfg.Transport.DefaultNetwork.Name())
 	}
-	if len(cfg.Transport.NetworkMappings) != 0 {
-		t.Fatalf("unexpected default transport mappings: %#v", cfg.Transport.NetworkMappings)
-	}
+	assertDefaultTransportMappings(t, cfg.Transport.NetworkMappings)
 }
 
 func TestTransportConfigPreservesExplicitNullAndMappings(t *testing.T) {

@@ -162,6 +162,10 @@ Behavior:
   network and host-pattern mappings.
 - Provides a small built-in network factory currently supporting `native`, so
   daemon and admin code can create the same network kind consistently.
+- The daemon default config keeps the native default network enabled but
+  installs `nil` host mappings for `*.tor`, `*.i2p`, and `*.loki`, so those
+  peers stay disabled unless a config file or admin API call maps them to a
+  real network.
 - Closes all affected listeners, accepted children, and dialed connections when
   a mapping changes so no resource survives on the wrong network.
 - Treats `Options.SourceInterface` as a best-effort hint in the built-in TCP
