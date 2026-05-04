@@ -11,7 +11,8 @@ At runtime, the system is composed as:
 2. `transport` provides pluggable carrier transports and host-scoped
    `gonnect.Network` selection for connection setup.
 3. `autopeer` fetches public peer lists from one or more external sources and
-   maintains a runtime candidate set for future autopeering logic.
+   can maintain public peer counts at runtime by adding filtered candidates to
+   `core` when configured thresholds are not met.
 4. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
 5. `admin` exposes a local control API over TCP or UNIX sockets.
    The daemon wires admin adapters to `core`, `multicast`, and `tun` at
@@ -171,8 +172,9 @@ Purpose:
 - Fetch public peer documents from one or more configured source URLs.
 - Support one default `gonnect.Network` plus optional source-specific network
   overrides.
-- Keep an aggregated, thread-safe snapshot of candidate peers for higher
-  layers.
+- Keep an aggregated, thread-safe snapshot of candidate peers.
+- Optionally apply runtime autopeering policy against a small `core`-like
+  peer-management interface.
 
 Main types:
 - `autopeer.Fetcher`
@@ -188,11 +190,24 @@ Behavior:
 - Loads `BUILTIN` immediately from generated embedded data and never refreshes
   it over the network.
 - Logs fetch and parse failures without interrupting other sources.
+- `Manager` starts and stops the fetcher, periodically evaluates configured
+  thresholds, and attempts to add at most one new public peer per check when
+  thresholds are unmet.
+- Candidate selection filters endpoints by configured countries and transport
+  schemes. If both filters are empty, the manager remains idle.
+- Supported thresholds today are:
+  - minimum total connected peers
+  - minimum connected peers whose URIs are present in the filtered fetcher set
+- The manager will not attempt to re-add URIs that `core` already knows about,
+  so it complements existing persistent-peer retry logic instead of fighting it.
+- When multiple eligible endpoints remain, the manager prefers higher
+  `uptime_7d_raw` values with a small random tie-breaker.
 
 Current boundary:
-- `autopeer` does not depend on `src/core` yet.
-- It is implemented as a standalone candidate-peer discovery module so daemon
-  wiring can be added later without pulling source-fetching logic into `core`.
+- `autopeer` still does not import `src/core`.
+- Integration happens through a tiny peer-management interface implemented by
+  higher layers, keeping source fetching and peer-add policy decoupled from the
+  transport and handshake logic inside `core`.
 
 #### Protocol subsystem
 

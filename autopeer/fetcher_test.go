@@ -34,6 +34,19 @@ func (l *testLogger) joined() string {
 	return strings.Join(l.lines, "\n")
 }
 
+func (l *testLogger) countContains(needle string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	count := 0
+	for _, line := range l.lines {
+		if strings.Contains(line, needle) {
+			count++
+		}
+	}
+	return count
+}
+
 type stubNetwork struct {
 	dialFn func(context.Context, string, string) (net.Conn, error)
 }

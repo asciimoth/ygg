@@ -241,3 +241,29 @@ func (c *Core) UnmapTransportNetwork(pattern string) error {
 func (c *Core) PublicKey() ed25519.PublicKey {
 	return c.public
 }
+
+// PeerURIs returns the configured peer URIs known to the core.
+func (c *Core) PeerURIs() []string {
+	peers := c.GetPeers()
+	uris := make([]string, 0, len(peers))
+	for _, peer := range peers {
+		if peer.URI == "" {
+			continue
+		}
+		uris = append(uris, peer.URI)
+	}
+	return uris
+}
+
+// ConnectedPeerURIs returns the currently connected peer URIs known to the core.
+func (c *Core) ConnectedPeerURIs() []string {
+	peers := c.GetPeers()
+	uris := make([]string, 0, len(peers))
+	for _, peer := range peers {
+		if !peer.Up || peer.URI == "" {
+			continue
+		}
+		uris = append(uris, peer.URI)
+	}
+	return uris
+}
