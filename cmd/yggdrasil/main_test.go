@@ -24,7 +24,7 @@ func TestNewTransportManagerAppliesDefaultAnonymousNetworkBlocks(t *testing.T) {
 	}
 
 	mappings := manager.NetworkMappings()
-	want := []string{"*.tor", "*.i2p", "*.loki"}
+	want := []string{"*.onion", "*.i2p", "*.loki"}
 	if len(mappings) != len(want) {
 		t.Fatalf("unexpected default transport mappings: %#v", mappings)
 	}

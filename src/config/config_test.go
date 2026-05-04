@@ -12,9 +12,9 @@ func assertDefaultTransportMappings(t *testing.T, mappings map[string]TransportN
 	t.Helper()
 
 	want := map[string]struct{}{
-		"*.tor":  {},
-		"*.i2p":  {},
-		"*.loki": {},
+		"*.onion": {},
+		"*.i2p":   {},
+		"*.loki":  {},
 	}
 	if len(mappings) != len(want) {
 		t.Fatalf("unexpected transport mappings: %#v", mappings)

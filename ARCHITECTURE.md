@@ -74,7 +74,7 @@ Construction:
 Daemon default:
 - `cmd/yggdrasil` currently builds the manager from `config.Transport`.
 - If the config does not explicitly override that block, the daemon creates one
-  native default network plus `nil` mappings for `*.tor`, `*.i2p`, and
+  native default network plus `nil` mappings for `*.onion`, `*.i2p`, and
   `*.loki`.
 
 Important internals:
@@ -164,7 +164,7 @@ Behavior:
 - Provides a small built-in network factory currently supporting `native`, so
   daemon and admin code can create the same network kind consistently.
 - The daemon default config keeps the native default network enabled but
-  installs `nil` host mappings for `*.tor`, `*.i2p`, and `*.loki`, so those
+  installs `nil` host mappings for `*.onion`, `*.i2p`, and `*.loki`, so those
   peers stay disabled unless a config file or admin API call maps them to a
   real network.
 - The daemon layers an additional runtime network resolver on top of the

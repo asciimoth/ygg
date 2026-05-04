@@ -228,7 +228,7 @@ func TestTransportHandlers(t *testing.T) {
 
 	if err := a.setTransportHandler(&SetTransportRequest{
 		DefaultNetworkConfig: `{"type":"socks","proxy_url":"socks5://proxy.internal:1080"}`,
-		NetworkMappings:      `{"*.example":"native","disabled.example":null,"*.onion":{"type":"socks","proxy_url":"socks5://tor:9050"}}`,
+		NetworkMappings:      `{"*.example":"native","disabled.example":null,"hidden.example":{"type":"socks","proxy_url":"socks5://tor:9050"}}`,
 		UnsetNetworkMappings: "unused.example",
 	}); err != nil {
 		t.Fatalf("setTransportHandler(nil+map): %v", err)
@@ -250,16 +250,16 @@ func TestTransportHandlers(t *testing.T) {
 	if got := getResp.NetworkMappings["disabled.example"]; got != nil {
 		t.Fatalf("expected nil mapped network, got %#v", got)
 	}
-	if got := getResp.NetworkMappings["*.onion"]; got == nil || *got != transportcfg.NetworkKindSocks {
+	if got := getResp.NetworkMappings["hidden.example"]; got == nil || *got != transportcfg.NetworkKindSocks {
 		t.Fatalf("unexpected socks mapped network: %#v", got)
 	}
-	if got, ok := getResp.NetworkMappingConfigs["*.onion"].(map[string]any); !ok || got["type"] != "socks" || got["proxy_url"] != "socks5://tor:9050" {
-		t.Fatalf("unexpected socks mapped config: %#v", getResp.NetworkMappingConfigs["*.onion"])
+	if got, ok := getResp.NetworkMappingConfigs["hidden.example"].(map[string]any); !ok || got["type"] != "socks" || got["proxy_url"] != "socks5://tor:9050" {
+		t.Fatalf("unexpected socks mapped config: %#v", getResp.NetworkMappingConfigs["hidden.example"])
 	}
 
 	if err := a.setTransportHandler(&SetTransportRequest{
 		DefaultNetwork:       "unset",
-		UnsetNetworkMappings: "*.example,disabled.example,*.onion",
+		UnsetNetworkMappings: "*.example,disabled.example,hidden.example",
 	}); err != nil {
 		t.Fatalf("setTransportHandler(unset): %v", err)
 	}
@@ -278,9 +278,9 @@ func assertInitialTransportMappings(t *testing.T, mappings map[string]*string) {
 	t.Helper()
 
 	want := map[string]struct{}{
-		"*.tor":  {},
-		"*.i2p":  {},
-		"*.loki": {},
+		"*.onion": {},
+		"*.i2p":   {},
+		"*.loki":  {},
 	}
 	if len(mappings) != len(want) {
 		t.Fatalf("unexpected initial transport mappings: %#v", mappings)
