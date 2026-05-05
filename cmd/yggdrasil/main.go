@@ -548,6 +548,7 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 			Proxies:         proxies,
 			DefaultProxyURL: defaultProxyURL,
 			DNS:             dns,
+			Log:             c.log,
 		})
 		if err != nil {
 			return err

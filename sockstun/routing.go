@@ -26,6 +26,14 @@ type DNSConfig struct {
 	NoResolveZones []string `json:"no_resolve_zones,omitempty"`
 }
 
+type Logger interface {
+	Debugf(string, ...interface{})
+}
+
+type discardLogger struct{}
+
+func (discardLogger) Debugf(string, ...interface{}) {}
+
 type proxyRoute struct {
 	cfg     ProxyConfig
 	filter  gonnect.Filter
@@ -42,10 +50,18 @@ type routeNetwork struct {
 	dns             DNSConfig
 	noResolveZones  []string
 	resolver        gonnect.Resolver
+	log             Logger
 }
 
-func newRouteNetwork(direct gonnect.Network, cfgs []ProxyConfig, defaultProxyURL string, dns DNSConfig) (*routeNetwork, error) {
-	n := &routeNetwork{direct: direct}
+func newRouteNetwork(direct gonnect.Network, cfgs []ProxyConfig, defaultProxyURL string, dns DNSConfig, logs ...Logger) (*routeNetwork, error) {
+	var log Logger
+	if len(logs) > 0 {
+		log = logs[0]
+	}
+	if log == nil {
+		log = discardLogger{}
+	}
+	n := &routeNetwork{direct: direct, log: log}
 	if err := n.SetProxies(cfgs, defaultProxyURL); err != nil {
 		return nil, err
 	}
@@ -96,6 +112,10 @@ func (n *routeNetwork) SetProxies(cfgs []ProxyConfig, defaultProxyURL string) er
 	n.defaultProxyURL = defaultProxyURL
 	n.defaultProxy = defaultProxy
 	n.mu.Unlock()
+	n.log.Debugf("sockstun routing configured proxy_routes=%d default_proxy=%q", len(routes), defaultProxyURL)
+	for i, route := range routes {
+		n.log.Debugf("sockstun routing proxy_route index=%d filter=%q proxy_url=%q", i, route.cfg.Filter, route.cfg.ProxyURL)
+	}
 	return nil
 }
 
@@ -118,7 +138,9 @@ func (n *routeNetwork) SetDNS(cfg DNSConfig) error {
 	n.dns = cfg
 	n.noResolveZones = append(append([]string{}, defaultNoResolveZones...), cfg.NoResolveZones...)
 	n.resolver = resolver
+	zones := append([]string{}, n.noResolveZones...)
 	n.mu.Unlock()
+	n.log.Debugf("sockstun DNS configured fallback_server=%q no_resolve_zones=%q", cfg.FallbackServer, strings.Join(zones, ","))
 	return nil
 }
 
@@ -152,69 +174,88 @@ func (n *routeNetwork) IsNative() bool {
 }
 
 func (n *routeNetwork) Dial(ctx context.Context, network, address string) (net.Conn, error) {
-	address = n.resolveAddress(ctx, network, address)
+	address = n.resolveAddress(ctx, "Dial", network, address)
 	return n.dialUnresolved(ctx, network, address)
 }
 
 func (n *routeNetwork) dialUnresolved(ctx context.Context, network, address string) (net.Conn, error) {
-	return n.networkFor(network, address).Dial(ctx, network, address)
+	return n.networkFor("Dial", network, address).Dial(ctx, network, address)
 }
 
 func (n *routeNetwork) Listen(ctx context.Context, network, address string) (net.Listener, error) {
-	address = n.resolveAddress(ctx, network, address)
-	return n.networkFor(network, address).Listen(ctx, network, address)
+	address = n.resolveAddress(ctx, "Listen", network, address)
+	return n.networkFor("Listen", network, address).Listen(ctx, network, address)
 }
 
 func (n *routeNetwork) PacketDial(ctx context.Context, network, address string) (gonnect.PacketConn, error) {
-	address = n.resolveAddress(ctx, network, address)
-	return n.networkFor(network, address).PacketDial(ctx, network, address)
+	address = n.resolveAddress(ctx, "PacketDial", network, address)
+	return n.networkFor("PacketDial", network, address).PacketDial(ctx, network, address)
 }
 
 func (n *routeNetwork) ListenPacket(ctx context.Context, network, address string) (gonnect.PacketConn, error) {
-	address = n.resolveAddress(ctx, network, address)
-	return n.networkFor(network, address).ListenPacket(ctx, network, address)
+	address = n.resolveAddress(ctx, "ListenPacket", network, address)
+	return n.networkFor("ListenPacket", network, address).ListenPacket(ctx, network, address)
 }
 
 func (n *routeNetwork) DialTCP(ctx context.Context, network, laddr, raddr string) (gonnect.TCPConn, error) {
-	raddr = n.resolveAddress(ctx, network, raddr)
-	return n.networkFor(network, raddr).DialTCP(ctx, network, laddr, raddr)
+	raddr = n.resolveAddress(ctx, "DialTCP", network, raddr)
+	return n.networkFor("DialTCP", network, raddr).DialTCP(ctx, network, laddr, raddr)
 }
 
 func (n *routeNetwork) ListenTCP(ctx context.Context, network, laddr string) (gonnect.TCPListener, error) {
-	laddr = n.resolveAddress(ctx, network, laddr)
-	return n.networkFor(network, laddr).ListenTCP(ctx, network, laddr)
+	laddr = n.resolveAddress(ctx, "ListenTCP", network, laddr)
+	return n.networkFor("ListenTCP", network, laddr).ListenTCP(ctx, network, laddr)
 }
 
 func (n *routeNetwork) DialUDP(ctx context.Context, network, laddr, raddr string) (gonnect.UDPConn, error) {
-	raddr = n.resolveAddress(ctx, network, raddr)
-	return n.networkFor(network, raddr).DialUDP(ctx, network, laddr, raddr)
+	raddr = n.resolveAddress(ctx, "DialUDP", network, raddr)
+	return n.networkFor("DialUDP", network, raddr).DialUDP(ctx, network, laddr, raddr)
 }
 
 func (n *routeNetwork) ListenUDP(ctx context.Context, network, laddr string) (gonnect.UDPConn, error) {
-	laddr = n.resolveAddress(ctx, network, laddr)
-	return n.networkFor(network, laddr).ListenUDP(ctx, network, laddr)
+	laddr = n.resolveAddress(ctx, "ListenUDP", network, laddr)
+	return n.networkFor("ListenUDP", network, laddr).ListenUDP(ctx, network, laddr)
 }
 
 func (n *routeNetwork) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+	originalHost := host
 	host = normalizeHost(host)
+	n.log.Debugf("sockstun resolver LookupIP start network=%q host=%q normalized_host=%q", network, originalHost, host)
 	if host == "" {
+		n.log.Debugf("sockstun resolver LookupIP failed network=%q host=%q reason=empty-host", network, originalHost)
 		return nil, noSuchHost(host)
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		ips := filterIPsByNetwork([]net.IP{ip}, network)
 		if len(ips) == 0 {
+			n.log.Debugf("sockstun resolver LookupIP literal filtered network=%q host=%q ip=%q", network, host, ip.String())
 			return nil, noSuchHost(host)
 		}
+		n.log.Debugf("sockstun resolver LookupIP literal network=%q host=%q ips=%q", network, host, formatIPs(ips))
 		return ips, nil
 	}
-	if !n.shouldSkipResolve(host) {
+	if skip, zone := n.shouldSkipResolve(host); !skip {
 		if ips, err := n.lookupIPViaRouteResolver(ctx, network, host); err == nil && len(ips) > 0 {
+			n.log.Debugf("sockstun resolver LookupIP route-resolver hit network=%q host=%q ips=%q", network, host, formatIPs(ips))
 			return ips, nil
+		} else if err != nil {
+			n.log.Debugf("sockstun resolver LookupIP route-resolver miss network=%q host=%q err=%v", network, host, err)
+		} else {
+			n.log.Debugf("sockstun resolver LookupIP route-resolver miss network=%q host=%q reason=empty-result", network, host)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupIP skipped route-resolver network=%q host=%q zone=%q", network, host, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
-		return resolver.LookupIP(ctx, network, host)
+		ips, err := resolver.LookupIP(ctx, network, host)
+		if err != nil {
+			n.log.Debugf("sockstun resolver LookupIP direct failed network=%q host=%q err=%v", network, host, err)
+			return nil, err
+		}
+		n.log.Debugf("sockstun resolver LookupIP direct hit network=%q host=%q ips=%q", network, host, formatIPs(ips))
+		return ips, nil
 	}
+	n.log.Debugf("sockstun resolver LookupIP failed network=%q host=%q reason=no-direct-resolver", network, host)
 	return nil, noSuchHost(host)
 }
 
@@ -261,24 +302,45 @@ func (n *routeNetwork) LookupHost(ctx context.Context, host string) ([]string, e
 
 func (n *routeNetwork) LookupAddr(ctx context.Context, addr string) ([]string, error) {
 	if names, err := n.lookupAddrViaRouteResolver(ctx, addr); err == nil && len(names) > 0 {
+		n.log.Debugf("sockstun resolver LookupAddr route-resolver hit addr=%q names=%q", addr, strings.Join(names, ","))
 		return names, nil
+	} else if err != nil {
+		n.log.Debugf("sockstun resolver LookupAddr route-resolver miss addr=%q err=%v", addr, err)
+	} else {
+		n.log.Debugf("sockstun resolver LookupAddr route-resolver miss addr=%q reason=empty-result", addr)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
-		return resolver.LookupAddr(ctx, addr)
+		names, err := resolver.LookupAddr(ctx, addr)
+		if err != nil {
+			n.log.Debugf("sockstun resolver LookupAddr direct failed addr=%q err=%v", addr, err)
+			return nil, err
+		}
+		n.log.Debugf("sockstun resolver LookupAddr direct hit addr=%q names=%q", addr, strings.Join(names, ","))
+		return names, nil
 	}
+	n.log.Debugf("sockstun resolver LookupAddr failed addr=%q reason=no-direct-resolver", addr)
 	return nil, noSuchHost(addr)
 }
 
 func (n *routeNetwork) LookupCNAME(ctx context.Context, host string) (string, error) {
-	if !n.shouldSkipResolve(host) {
+	if skip, zone := n.shouldSkipResolve(host); !skip {
 		n.mu.RLock()
 		resolver := n.resolver
 		n.mu.RUnlock()
 		if resolver != nil {
 			if cname, err := resolver.LookupCNAME(ctx, host); err == nil && cname != "" {
+				n.log.Debugf("sockstun resolver LookupCNAME route-resolver hit host=%q cname=%q", host, cname)
 				return cname, nil
+			} else if err != nil {
+				n.log.Debugf("sockstun resolver LookupCNAME route-resolver miss host=%q err=%v", host, err)
+			} else {
+				n.log.Debugf("sockstun resolver LookupCNAME route-resolver miss host=%q reason=empty-result", host)
 			}
+		} else {
+			n.log.Debugf("sockstun resolver LookupCNAME skipped route-resolver host=%q reason=no-resolver", host)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupCNAME skipped route-resolver host=%q zone=%q", host, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupCNAME(ctx, host)
@@ -291,15 +353,24 @@ func (n *routeNetwork) LookupPort(ctx context.Context, network, service string) 
 }
 
 func (n *routeNetwork) LookupNS(ctx context.Context, name string) ([]*net.NS, error) {
-	if !n.shouldSkipResolve(name) {
+	if skip, zone := n.shouldSkipResolve(name); !skip {
 		n.mu.RLock()
 		resolver := n.resolver
 		n.mu.RUnlock()
 		if resolver != nil {
 			if records, err := resolver.LookupNS(ctx, name); err == nil && len(records) > 0 {
+				n.log.Debugf("sockstun resolver LookupNS route-resolver hit name=%q records=%d", name, len(records))
 				return records, nil
+			} else if err != nil {
+				n.log.Debugf("sockstun resolver LookupNS route-resolver miss name=%q err=%v", name, err)
+			} else {
+				n.log.Debugf("sockstun resolver LookupNS route-resolver miss name=%q reason=empty-result", name)
 			}
+		} else {
+			n.log.Debugf("sockstun resolver LookupNS skipped route-resolver name=%q reason=no-resolver", name)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupNS skipped route-resolver name=%q zone=%q", name, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupNS(ctx, name)
@@ -308,15 +379,24 @@ func (n *routeNetwork) LookupNS(ctx context.Context, name string) ([]*net.NS, er
 }
 
 func (n *routeNetwork) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
-	if !n.shouldSkipResolve(name) {
+	if skip, zone := n.shouldSkipResolve(name); !skip {
 		n.mu.RLock()
 		resolver := n.resolver
 		n.mu.RUnlock()
 		if resolver != nil {
 			if records, err := resolver.LookupMX(ctx, name); err == nil && len(records) > 0 {
+				n.log.Debugf("sockstun resolver LookupMX route-resolver hit name=%q records=%d", name, len(records))
 				return records, nil
+			} else if err != nil {
+				n.log.Debugf("sockstun resolver LookupMX route-resolver miss name=%q err=%v", name, err)
+			} else {
+				n.log.Debugf("sockstun resolver LookupMX route-resolver miss name=%q reason=empty-result", name)
 			}
+		} else {
+			n.log.Debugf("sockstun resolver LookupMX skipped route-resolver name=%q reason=no-resolver", name)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupMX skipped route-resolver name=%q zone=%q", name, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupMX(ctx, name)
@@ -325,16 +405,25 @@ func (n *routeNetwork) LookupMX(ctx context.Context, name string) ([]*net.MX, er
 }
 
 func (n *routeNetwork) LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, error) {
-	if !n.shouldSkipResolve(name) {
+	if skip, zone := n.shouldSkipResolve(name); !skip {
 		n.mu.RLock()
 		resolver := n.resolver
 		n.mu.RUnlock()
 		if resolver != nil {
 			cname, records, err := resolver.LookupSRV(ctx, service, proto, name)
 			if err == nil && len(records) > 0 {
+				n.log.Debugf("sockstun resolver LookupSRV route-resolver hit service=%q proto=%q name=%q cname=%q records=%d", service, proto, name, cname, len(records))
 				return cname, records, nil
+			} else if err != nil {
+				n.log.Debugf("sockstun resolver LookupSRV route-resolver miss service=%q proto=%q name=%q err=%v", service, proto, name, err)
+			} else {
+				n.log.Debugf("sockstun resolver LookupSRV route-resolver miss service=%q proto=%q name=%q reason=empty-result", service, proto, name)
 			}
+		} else {
+			n.log.Debugf("sockstun resolver LookupSRV skipped route-resolver service=%q proto=%q name=%q reason=no-resolver", service, proto, name)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupSRV skipped route-resolver service=%q proto=%q name=%q zone=%q", service, proto, name, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupSRV(ctx, service, proto, name)
@@ -343,15 +432,24 @@ func (n *routeNetwork) LookupSRV(ctx context.Context, service, proto, name strin
 }
 
 func (n *routeNetwork) LookupTXT(ctx context.Context, name string) ([]string, error) {
-	if !n.shouldSkipResolve(name) {
+	if skip, zone := n.shouldSkipResolve(name); !skip {
 		n.mu.RLock()
 		resolver := n.resolver
 		n.mu.RUnlock()
 		if resolver != nil {
 			if records, err := resolver.LookupTXT(ctx, name); err == nil && len(records) > 0 {
+				n.log.Debugf("sockstun resolver LookupTXT route-resolver hit name=%q records=%d", name, len(records))
 				return records, nil
+			} else if err != nil {
+				n.log.Debugf("sockstun resolver LookupTXT route-resolver miss name=%q err=%v", name, err)
+			} else {
+				n.log.Debugf("sockstun resolver LookupTXT route-resolver miss name=%q reason=empty-result", name)
 			}
+		} else {
+			n.log.Debugf("sockstun resolver LookupTXT skipped route-resolver name=%q reason=no-resolver", name)
 		}
+	} else {
+		n.log.Debugf("sockstun resolver LookupTXT skipped route-resolver name=%q zone=%q", name, zone)
 	}
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupTXT(ctx, name)
@@ -359,9 +457,22 @@ func (n *routeNetwork) LookupTXT(ctx context.Context, name string) ([]string, er
 	return nil, noSuchHost(name)
 }
 
-func (n *routeNetwork) resolveAddress(ctx context.Context, network, address string) string {
+func (n *routeNetwork) resolveAddress(ctx context.Context, op, network, address string) string {
 	host, port, ok := splitAddress(address)
-	if !ok || host == "" || isIPLiteral(host) || n.shouldSkipResolve(host) {
+	if !ok {
+		n.log.Debugf("sockstun resolver %s address not resolved network=%q address=%q reason=split-failed", op, network, address)
+		return address
+	}
+	if host == "" {
+		n.log.Debugf("sockstun resolver %s address not resolved network=%q address=%q reason=empty-host", op, network, address)
+		return address
+	}
+	if isIPLiteral(host) {
+		n.log.Debugf("sockstun resolver %s address not resolved network=%q address=%q host=%q reason=ip-literal", op, network, address, host)
+		return address
+	}
+	if skip, zone := n.shouldSkipResolve(host); skip {
+		n.log.Debugf("sockstun resolver %s address not resolved network=%q address=%q host=%q zone=%q", op, network, address, host, zone)
 		return address
 	}
 
@@ -369,21 +480,32 @@ func (n *routeNetwork) resolveAddress(ctx context.Context, network, address stri
 	resolver := n.resolver
 	n.mu.RUnlock()
 	if resolver == nil {
+		n.log.Debugf("sockstun resolver %s address not resolved network=%q address=%q host=%q reason=no-resolver", op, network, address, host)
 		return address
 	}
 
+	n.log.Debugf("sockstun resolver %s resolving address network=%q address=%q host=%q family=%q", op, network, address, host, gonnecthelpers.FamilyFromNetwork(network))
 	ips, err := resolver.LookupIP(ctx, gonnecthelpers.FamilyFromNetwork(network), host)
 	if err != nil || len(ips) == 0 {
+		if err != nil {
+			n.log.Debugf("sockstun resolver %s address lookup failed network=%q address=%q host=%q err=%v", op, network, address, host, err)
+		} else {
+			n.log.Debugf("sockstun resolver %s address lookup failed network=%q address=%q host=%q reason=empty-result", op, network, address, host)
+		}
 		return address
 	}
 	ip := gonnecthelpers.PickIP(ips, preferFamily(network))
 	if ip == nil {
+		n.log.Debugf("sockstun resolver %s address lookup had no preferred IP network=%q address=%q host=%q ips=%q", op, network, address, host, formatIPs(ips))
 		return address
 	}
 	if port == "" {
+		n.log.Debugf("sockstun resolver %s address rewritten network=%q from=%q to=%q ips=%q", op, network, address, ip.String(), formatIPs(ips))
 		return ip.String()
 	}
-	return net.JoinHostPort(ip.String(), port)
+	resolved := net.JoinHostPort(ip.String(), port)
+	n.log.Debugf("sockstun resolver %s address rewritten network=%q from=%q to=%q ips=%q", op, network, address, resolved, formatIPs(ips))
+	return resolved
 }
 
 func (n *routeNetwork) lookupIPViaRouteResolver(ctx context.Context, network, host string) ([]net.IP, error) {
@@ -414,30 +536,33 @@ func (n *routeNetwork) lookupAddrViaRouteResolver(ctx context.Context, addr stri
 	return resolver.LookupAddr(ctx, addr)
 }
 
-func (n *routeNetwork) shouldSkipResolve(host string) bool {
+func (n *routeNetwork) shouldSkipResolve(host string) (bool, string) {
 	host = normalizeHost(host)
 	n.mu.RLock()
 	zones := append([]string{}, n.noResolveZones...)
 	n.mu.RUnlock()
 	for _, zone := range zones {
 		if host == strings.TrimPrefix(zone, ".") || strings.HasSuffix(host, zone) {
-			return true
+			return true, zone
 		}
 	}
-	return false
+	return false, ""
 }
 
-func (n *routeNetwork) networkFor(network, address string) gonnect.Network {
+func (n *routeNetwork) networkFor(op, network, address string) gonnect.Network {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	for _, route := range n.routes {
 		if route.filter(network, address) {
+			n.log.Debugf("sockstun routing %s network=%q address=%q selected=proxy filter=%q proxy_url=%q", op, network, address, route.cfg.Filter, route.cfg.ProxyURL)
 			return route.network
 		}
 	}
 	if n.defaultProxy != nil && !isYggdrasilAddress(address) {
+		n.log.Debugf("sockstun routing %s network=%q address=%q selected=default-proxy proxy_url=%q", op, network, address, n.defaultProxyURL)
 		return n.defaultProxy
 	}
+	n.log.Debugf("sockstun routing %s network=%q address=%q selected=direct yggdrasil_address=%t", op, network, address, isYggdrasilAddress(address))
 	return n.direct
 }
 
@@ -491,6 +616,17 @@ func filterIPsByNetwork(ips []net.IP, network string) []net.IP {
 		}
 	}
 	return out
+}
+
+func formatIPs(ips []net.IP) string {
+	out := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		if ip == nil {
+			continue
+		}
+		out = append(out, ip.String())
+	}
+	return strings.Join(out, ",")
 }
 
 func noSuchHost(host string) error {

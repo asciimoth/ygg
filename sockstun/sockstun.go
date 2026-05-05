@@ -31,6 +31,7 @@ type Config struct {
 	DefaultProxyURL  string
 	DNS              DNSConfig
 	HandshakeTimeout time.Duration
+	Log              Logger
 }
 
 type Tun struct {
@@ -75,7 +76,7 @@ func Create(cfg Config) (*Tun, error) {
 		return nil, fmt.Errorf("build VTun: %w", err)
 	}
 
-	network, err := newRouteNetwork(vt, cfg.Proxies, cfg.DefaultProxyURL, cfg.DNS)
+	network, err := newRouteNetwork(vt, cfg.Proxies, cfg.DefaultProxyURL, cfg.DNS, cfg.Log)
 	if err != nil {
 		_ = vt.Close()
 		return nil, err

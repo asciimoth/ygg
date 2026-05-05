@@ -17,11 +17,11 @@ run-sockstun-autopeer:
 	cfg="${tmpdir}/ygg.json"; \
 	countries="$(jq -r '[.peers[].country] | unique | join(",")' autopeer/builtin_peers_generated.json)"; \
 	go run ./cmd/yggdrasil -genconf -json \
-		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" '.AdminListen = $admin | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
+		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" '.AdminListen = $admin | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .TunSocksDNSFallback = "[300:6223::53]:53" | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
 		>"${cfg}"; \
 	echo "Admin: ${ADMIN_LISTEN:-tcp://localhost:9001}"; \
 	echo "SOCKS: ${SOCKS_LISTEN:-127.0.0.1:1080}"; \
-	echo "Curl:  curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} http://[200:...]/"; \
+	echo "Curl:  curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} http://myip.ygg"; \
 	go run ./cmd/yggdrasil -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
 
 # Docker-based compatibility tests against pinned upstream yggdrasil-go. Uses sudo.
