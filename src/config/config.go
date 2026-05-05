@@ -172,10 +172,7 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	if err := cfg.AutoPeer.normalize(); err != nil {
 		return err
 	}
-	cfg.TunType = strings.ToLower(strings.TrimSpace(cfg.TunType))
-	if cfg.TunType == "" {
-		cfg.TunType = "native"
-	}
+	cfg.TunType = NormalizeTunType(cfg.TunType)
 	cfg.IfName = strings.TrimSpace(cfg.IfName)
 	if cfg.IfName == "" {
 		cfg.IfName = "auto"

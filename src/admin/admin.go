@@ -98,13 +98,13 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 				a.log.Debugln("Admin socket", u.Path, "already exists, trying to clean up")
 				if _, err := net.DialTimeout("unix", u.Path, time.Second*2); err == nil || err.(net.Error).Timeout() {
 					a.log.Errorln("Admin socket", u.Path, "already exists and is in use by another process")
-					os.Exit(1)
+					return nil, fmt.Errorf("admin socket %q already exists and is in use", u.Path)
 				} else {
 					if err := os.Remove(u.Path); err == nil {
 						a.log.Debugln(u.Path, "was cleaned up")
 					} else {
 						a.log.Errorln(u.Path, "already exists and was not cleaned up:", err)
-						os.Exit(1)
+						return nil, fmt.Errorf("remove stale admin socket %q: %w", u.Path, err)
 					}
 				}
 			}
@@ -128,7 +128,7 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 	}
 	if err != nil {
 		a.log.Errorf("Admin socket failed to listen: %v", err)
-		os.Exit(1)
+		return nil, err
 	}
 	a.log.Infof("%s admin socket listening on %s",
 		strings.ToUpper(a.listener.Addr().Network()),

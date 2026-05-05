@@ -72,7 +72,21 @@ func (cmdLineEnv *CmdLineEnv) setEndpoint(logger *log.Logger) {
 			if err := hjson.Unmarshal(cfg, &dat); err != nil {
 				panic(err)
 			}
-			if ep, ok := dat["AdminListen"].(string); ok && (ep != "none" && ep != "") {
+			defaults := config.GetDefaults()
+			adminListen := defaults.DefaultAdminListen
+			if ep, ok := dat["AdminListen"].(string); ok {
+				adminListen = ep
+			}
+			tunType := "native"
+			if tt, ok := dat["TunType"].(string); ok {
+				tunType = tt
+			}
+			ifName := defaults.DefaultIfName
+			if name, ok := dat["IfName"].(string); ok {
+				ifName = name
+			}
+			ep := config.EffectiveAdminListenFor(adminListen, tunType, ifName)
+			if ep != "none" && ep != "" {
 				cmdLineEnv.endpoint = ep
 				logger.Println("Found platform default config file", config.GetDefaults().DefaultConfigFile)
 				logger.Println("Using endpoint", cmdLineEnv.endpoint, "from AdminListen")

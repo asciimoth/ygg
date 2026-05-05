@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -302,7 +303,14 @@ func main() {
 			options = append(options, admin.LogLookups{})
 		}
 		if n.admin, err = admin.New(n.core, logger, options...); err != nil {
-			panic(err)
+			if !cfg.UseUnprivilegedAdminFallback() || !isPermissionError(err) {
+				panic(err)
+			}
+			cfg.AdminListen = config.UnprivilegedAdminListen
+			options[0] = admin.ListenAddress(cfg.AdminListen)
+			if n.admin, err = admin.New(n.core, logger, options...); err != nil {
+				panic(err)
+			}
 		}
 		if n.admin != nil {
 			n.admin.SetupCoreHandlers()
@@ -409,6 +417,10 @@ func main() {
 	n.core.Stop()
 }
 
+func isPermissionError(err error) bool {
+	return os.IsPermission(err) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
 func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.Network, error) {
 	defaultNetwork, err := transportNetworkFromConfig(cfg.Transport.DefaultNetwork)
 	if err != nil {
@@ -445,8 +457,8 @@ func transportNetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Ne
 }
 
 func shouldAttachTun(cfg *config.NodeConfig) bool {
-	switch strings.ToLower(strings.TrimSpace(cfg.TunType)) {
-	case "none", "dummy":
+	switch config.NormalizeTunType(cfg.TunType) {
+	case "none":
 		return false
 	default:
 		return cfg.IfName != "none" && cfg.IfName != "dummy"
@@ -454,17 +466,13 @@ func shouldAttachTun(cfg *config.NodeConfig) bool {
 }
 
 func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) error {
-	typ := strings.ToLower(strings.TrimSpace(req.Type))
+	typ := strings.TrimSpace(req.Type)
 	if typ == "" {
-		typ = c.cfg.TunType
+		typ = config.NormalizeTunType(c.cfg.TunType)
+	} else {
+		typ = config.NormalizeTunType(typ)
 	}
-	if typ == "" {
-		typ = "native"
-	}
-	if typ == "socks" || typ == "vtun+socks" {
-		typ = "sockstun"
-	}
-	if typ == "none" || typ == "dummy" {
+	if typ == "none" {
 		return c.node.tun.Detach()
 	}
 
