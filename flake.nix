@@ -45,15 +45,18 @@
               enable = true;
               description = "Makes sure go.mod matches the source code";
               entry = let script = pkgs.writeShellScript "gotidyhook" ''
-                go mod tidy -v
+                go -C ygglib mod tidy -v
+                go -C yggd mod tidy -v
+                go -C examples mod tidy -v
+                go work sync
               ''; in builtins.toString script;
               stages = [ "pre-commit" ];
             };
             golangtest = {
               enable = true;
-              description = "go test ./... --race";
+              description = "go test ./ygglib/... ./yggd/... ./examples/... --race";
               entry = let script = pkgs.writeShellScript "gotidyhook" ''
-                go test ./... --race
+                go test ./ygglib/... ./yggd/... ./examples/... --race
               ''; in builtins.toString script;
               stages = [ "pre-commit" ];
             };

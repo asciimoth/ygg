@@ -24,11 +24,11 @@ import (
 	"github.com/asciimoth/gonnect/native"
 	gologme "github.com/gologme/log"
 
-	"github.com/asciimoth/ygg/src/config"
-	"github.com/asciimoth/ygg/src/core"
-	"github.com/asciimoth/ygg/src/ipv6rwc"
-	yggtun "github.com/asciimoth/ygg/src/tun"
-	"github.com/asciimoth/ygg/transport"
+	"github.com/asciimoth/ygg/ygglib/config"
+	"github.com/asciimoth/ygg/ygglib/core"
+	"github.com/asciimoth/ygg/ygglib/ipv6rwc"
+	"github.com/asciimoth/ygg/ygglib/transport"
+	yggtun "github.com/asciimoth/ygg/ygglib/tun"
 )
 
 const (

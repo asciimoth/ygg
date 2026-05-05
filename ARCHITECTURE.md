@@ -26,12 +26,12 @@ At runtime, the system is composed as:
 10. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
     daemon.
 
-`cmd/yggdrasil` is the composition root. It wires the packages together but
-keeps most behavior inside `src/`.
+`yggd/yggd` is the composition root. It wires the packages together but
+keeps most behavior inside `ygglib/`.
 
 ## Top-Level Components
 
-### `src/config`
+### `ygglib/config`
 
 Purpose:
 - Define persistent node configuration.
@@ -56,7 +56,7 @@ Key outputs consumed by other packages:
 
 This package is intentionally passive. It does not start services.
 
-### `src/core`
+### `ygglib/core`
 
 Purpose:
 - Represent a running Yggdrasil node.
@@ -76,7 +76,7 @@ Construction:
   exist and which `gonnect.Network` instances they use before starting `core`.
 
 Daemon default:
-- `cmd/yggdrasil` currently builds the manager from `config.Transport`.
+- `yggd/yggd` currently builds the manager from `config.Transport`.
 - If the config does not explicitly override that block, the daemon creates one
   native default network plus `nil` mappings for `*.onion`, `*.i2p`, and
   `*.loki`.
@@ -98,7 +98,7 @@ Responsibilities:
 
 #### Link subsystem
 
-`src/core/link.go` owns peer lifecycle and handshake policy, but carrier
+`ygglib/core/link.go` owns peer lifecycle and handshake policy, but carrier
 creation is delegated to the injected `transport.Manager`.
 
 Currently supported carrier families are only those provided by the configured
@@ -227,7 +227,7 @@ Behavior:
   `uptime_7d_raw` values with a small random tie-breaker.
 
 Current boundary:
-- `autopeer` still does not import `src/core`.
+- `autopeer` still does not import `ygglib/core`.
 - Integration happens through a tiny peer-management interface implemented by
   higher layers, keeping source fetching and peer-add policy decoupled from the
   transport and handshake logic inside `core`.
@@ -245,7 +245,7 @@ It handles:
 This path is separate from the local admin socket. Admin commands may trigger
 protocol messages to remote nodes through this subsystem.
 
-### `src/admin`
+### `ygglib/admin`
 
 Purpose:
 - Expose a local management API for the daemon.
@@ -263,17 +263,17 @@ Behavior:
   runtime `transport.Manager` used by `core`.
 
 Dependency boundary:
-- `src/admin` depends on `src/core` and may also adapt optional runtime
+- `ygglib/admin` depends on `ygglib/core` and may also adapt optional runtime
   components like `*multicast.Multicast` and `*tun.TunAdapter`.
-- `src/core`, `src/multicast`, and `src/tun` do not depend on `src/admin`.
-- `cmd/yggdrasil` is the composition root that decides which adapters to
+- `ygglib/core`, `ygglib/multicast`, and `ygglib/tun` do not depend on `ygglib/admin`.
+- `yggd/yggd` is the composition root that decides which adapters to
   register.
 
 The admin package owns transport, request dispatch, and adapter glue. Domain
 logic remains in the underlying packages, which expose ordinary public methods
 and state accessors instead of accepting an admin instance.
 
-### `src/multicast`
+### `ygglib/multicast`
 
 Purpose:
 - Discover link-local peers on allowed interfaces.
@@ -295,14 +295,14 @@ Outputs into `core`:
 - `CallPeer(...)` for discovered peers
 
 Decoupling boundary:
-- `src/multicast` does not import `src/core`.
-- `cmd/yggdrasil` adapts `*core.Core` to the narrow multicast runtime
+- `ygglib/multicast` does not import `ygglib/core`.
+- `yggd/yggd` adapts `*core.Core` to the narrow multicast runtime
   interface at startup time.
 - Attaching multicast is optional and decided by the binary, not by `core`.
 
 This package is a peer discovery module only. It does not route data packets.
 
-### `src/ipv6rwc`
+### `ygglib/ipv6rwc`
 
 Purpose:
 - Convert between Yggdrasil public-key routing and IPv6 packet routing.
@@ -324,7 +324,7 @@ Behavior:
 This package is the boundary between Yggdrasil's native address space
 (`ed25519` public keys) and the exported IPv6 view.
 
-### `src/tun`
+### `ygglib/tun`
 
 Purpose:
 - Connect the IPv6 packet stream to an attached `gonnect/tun.Tun`
@@ -369,7 +369,7 @@ Runtime model:
 Purpose:
 - Create and configure native OS TUN devices in a platform-specific package at
   the repository root.
-- Keep `src/` packages free of direct dependencies on `tuntap`, `netlink`,
+- Keep `ygglib/` packages free of direct dependencies on `tuntap`, `netlink`,
   platform ioctls, and OS-specific interface setup.
 
 Main API:
@@ -379,7 +379,7 @@ Behavior:
 - Uses `github.com/asciimoth/tuntap` for native device creation.
 - Performs per-OS address, MTU, and link-up setup where needed.
 - Returns a generic `gonnect/tun.Tun` so callers can attach it through
-  `src/tun` without importing platform-specific details into library packages.
+  `ygglib/tun` without importing platform-specific details into library packages.
 
 ### `sockstun`
 
@@ -413,7 +413,7 @@ Behavior:
 - Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
   listener and VTun when detached or replaced.
 
-### `src/address`
+### `ygglib/address`
 
 Purpose:
 - Define the Yggdrasil IPv6 address and subnet types.
@@ -425,7 +425,7 @@ and tests.
 
 ## Binaries
 
-### `cmd/yggdrasil`
+### `yggd/yggd`
 
 The daemon is intentionally small. Its job is to:
 - parse flags
@@ -447,7 +447,7 @@ The daemon is intentionally small. Its job is to:
 The daemon does not reimplement protocol logic. It is mostly dependency
 injection and process lifecycle.
 
-### `cmd/yggdrasilctl`
+### `yggd/yggctl`
 
 This is a client for the admin socket.
 
@@ -456,7 +456,7 @@ It:
 - sends JSON admin requests
 - renders responses in JSON or table form
 
-### `cmd/genkeys`
+### `yggd/genkeys`
 
 Standalone helper for generating Ed25519 keys with favorable address ordering.
 It is operationally separate from the running node.
@@ -465,7 +465,7 @@ It is operationally separate from the running node.
 
 ### 1. Configuration to runtime
 
-`config.NodeConfig` is translated by `cmd/yggdrasil` into package-specific
+`config.NodeConfig` is translated by `yggd/yggd` into package-specific
 options:
 
 - `core.SetupOption`
@@ -474,19 +474,19 @@ options:
 - `tun.SetupOption`
 
 TUN type selection and implementation-specific parameters from config are
-interpreted in `cmd/yggdrasil`, not inside `src/tun`. Native TUN setup is
+interpreted in `yggd/yggd`, not inside `ygglib/tun`. Native TUN setup is
 delegated to `tunnative`; SOCKS-backed VTun setup is delegated to `sockstun`.
-When `LocalDNSListen` is configured, `cmd/yggdrasil` also owns the local DNS
+When `LocalDNSListen` is configured, `yggd/yggd` also owns the local DNS
 server lifecycle. That server answers only `IN A` and `IN AAAA` queries through
 `mnlib.Resolver`; when sockstun is active it uses sockstun's route network, and
 otherwise it uses the native network.
 
 This keeps parsing concerns out of runtime packages.
 
-For multicast specifically, `cmd/yggdrasil` is also responsible for:
+For multicast specifically, `yggd/yggd` is also responsible for:
 - deciding whether the module is attached at all
 - passing the current Yggdrasil protocol version
-- adapting `*core.Core` to the narrow interface expected by `src/multicast`
+- adapting `*core.Core` to the narrow interface expected by `ygglib/multicast`
 
 ### 2. Peer transport to routed overlay
 
@@ -527,7 +527,7 @@ to `tun.TunAdapter`.
 `admin.AdminSocket` exposes a handler registry:
 - `AddHandler(name, desc, args, handler)`
 
-Runtime wiring is owned by `cmd/yggdrasil`:
+Runtime wiring is owned by `yggd/yggd`:
 - `admin.SetupCoreHandlers()`
 - `admin.SetupMulticastHandlers(...)`
 - `admin.SetupTunHandlers(...)`

@@ -6,11 +6,11 @@ sice = "sice"
 gost = "gost"
 
 # legacy typos
-hander= "hander" # ./src/ipv6rwc/ipv6rwc.go:63:42
+hander= "hander" # ./ygglib/ipv6rwc/ipv6rwc.go:63:42
 
 [files]
 extend-exclude = [
   "*_test.go",
-  "autopeer/builtin_peers_generated.json",
+  "ygglib/autopeer/builtin_peers_generated.json",
 ]
 

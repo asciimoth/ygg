@@ -26,7 +26,7 @@ jobs:
         run: |
           NAME="$(sh contrib/semver/name.sh)"
           VERSION="$(sh contrib/semver/version.sh --bare)"
-          go mod vendor && tar --exclude-vcs --no-xattrs \
+          go work vendor && tar --exclude-vcs --no-xattrs \
             --exclude="${NAME}-${VERSION}-vendored.tar.gz" \
             -czf "${NAME}-${VERSION}-vendored.tar.gz" *
 

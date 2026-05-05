@@ -2,12 +2,17 @@ FROM golang:1.25.5-bookworm AS build
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
-RUN go mod download
+COPY go.work ./
+COPY ygglib/go.mod ygglib/go.sum ./ygglib/
+COPY yggd/go.mod yggd/go.sum ./yggd/
+COPY examples/go.mod examples/go.sum ./examples/
+RUN cd ygglib && go mod download
+RUN cd yggd && go mod download
+RUN cd examples && go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -o /out/yggdrasil ./cmd/yggdrasil
-RUN CGO_ENABLED=1 GOOS=linux go build -o /out/yggdrasilctl ./cmd/yggdrasilctl
+RUN CGO_ENABLED=1 GOOS=linux go build -o /out/yggdrasil ./yggd/yggd
+RUN CGO_ENABLED=1 GOOS=linux go build -o /out/yggdrasilctl ./yggd/yggctl
 
 FROM debian:bookworm-slim
 

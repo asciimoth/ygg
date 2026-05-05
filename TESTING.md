@@ -2,7 +2,7 @@
 
 This repository has three main test layers:
 
-- Fast package tests with `go test ./... --race`
+- Fast package tests with `go test ./ygglib/... ./yggd/... ./examples/... --race`
 - A Linux Docker compatibility suite that runs this fork against pinned upstream `yggdrasil-go`
 - A Linux Docker public-autopeering suite that validates runtime autopeer setup through the admin API
 - A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
@@ -18,7 +18,7 @@ just vet
 just tidy
 ```
 
-`just test` runs `go test ./... --race`, which should remain the default pre-merge check.
+`just test` runs `go test ./ygglib/... ./yggd/... ./examples/... --race`, which should remain the default pre-merge check.
 
 ## Compatibility Suite
 
