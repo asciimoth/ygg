@@ -33,3 +33,20 @@ func TestCreateStartsLocalSocksListener(t *testing.T) {
 		t.Fatal("expected socks listener to be closed")
 	}
 }
+
+func TestIsYggdrasilAddressIncludesNodeAndSubnetRanges(t *testing.T) {
+	tests := map[string]bool{
+		"[200::1]:80":    true,
+		"[2ff::1]:80":    true,
+		"[300::1]:80":    true,
+		"[3ff::1]:80":    true,
+		"[400::1]:80":    false,
+		"127.0.0.1:80":   false,
+		"example.com:80": false,
+	}
+	for address, want := range tests {
+		if got := isYggdrasilAddress(address); got != want {
+			t.Fatalf("isYggdrasilAddress(%q) = %v, want %v", address, got, want)
+		}
+	}
+}

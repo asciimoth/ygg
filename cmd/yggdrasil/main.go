@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -50,9 +51,11 @@ type node struct {
 }
 
 type daemonTunController struct {
-	node *node
-	cfg  *config.NodeConfig
-	log  core.Logger
+	node        *node
+	cfg         *config.NodeConfig
+	log         core.Logger
+	mu          sync.RWMutex
+	activeSocks *sockstun.Tun
 }
 
 type multicastCoreAdapter struct {
@@ -351,15 +354,17 @@ func main() {
 		if n.tun, err = yggtun.New(ipv6rwc.NewReadWriteCloser(n.core), logger, options...); err != nil {
 			panic(err)
 		}
-		controller := daemonTunController{node: n, cfg: cfg, log: logger}
+		controller := &daemonTunController{node: n, cfg: cfg, log: logger}
 		if shouldAttachTun(cfg) {
 			if err := controller.Attach(admin.AttachTunRequest{
-				Type:        cfg.TunType,
-				Name:        cfg.IfName,
-				MTU:         fmt.Sprintf("%d", cfg.IfMTU),
-				SocksListen: cfg.TunSocksListen,
-				MWO:         fmt.Sprintf("%d", cfg.TunMWO),
-				MRO:         fmt.Sprintf("%d", cfg.TunMRO),
+				Type:              cfg.TunType,
+				Name:              cfg.IfName,
+				MTU:               fmt.Sprintf("%d", cfg.IfMTU),
+				SocksListen:       cfg.TunSocksListen,
+				SocksProxies:      mustMarshalTunSocksProxies(cfg.TunSocksProxies),
+				SocksDefaultProxy: cfg.TunSocksDefaultProxy,
+				MWO:               fmt.Sprintf("%d", cfg.TunMWO),
+				MRO:               fmt.Sprintf("%d", cfg.TunMRO),
 			}, false); err != nil {
 				panic(err)
 			}
@@ -465,7 +470,7 @@ func shouldAttachTun(cfg *config.NodeConfig) bool {
 	}
 }
 
-func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) error {
+func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) error {
 	typ := strings.TrimSpace(req.Type)
 	if typ == "" {
 		typ = config.NormalizeTunType(c.cfg.TunType)
@@ -473,7 +478,7 @@ func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) er
 		typ = config.NormalizeTunType(typ)
 	}
 	if typ == "none" {
-		return c.node.tun.Detach()
+		return c.Detach()
 	}
 
 	mtu := c.cfg.IfMTU
@@ -489,6 +494,7 @@ func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) er
 	}
 
 	var device gtun.Tun
+	var activeSocks *sockstun.Tun
 	var err error
 
 	switch typ {
@@ -522,18 +528,25 @@ func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) er
 		if name == "" || name == "auto" {
 			name = sockstun.DefaultName
 		}
+		proxies, defaultProxyURL, err := parseOptionalSocksRouting(req.SocksProxies, req.SocksDefaultProxy, c.cfg.TunSocksProxies, c.cfg.TunSocksDefaultProxy)
+		if err != nil {
+			return err
+		}
 		st, err := sockstun.Create(sockstun.Config{
-			Name:    name,
-			Listen:  listen,
-			Address: c.node.core.Address(),
-			MTU:     mtu,
-			MWO:     mwo,
-			MRO:     mro,
+			Name:            name,
+			Listen:          listen,
+			Address:         c.node.core.Address(),
+			MTU:             mtu,
+			MWO:             mwo,
+			MRO:             mro,
+			Proxies:         proxies,
+			DefaultProxyURL: defaultProxyURL,
 		})
 		if err != nil {
 			return err
 		}
 		device = st
+		activeSocks = st
 	default:
 		return fmt.Errorf("unsupported tun type %q", typ)
 	}
@@ -547,6 +560,7 @@ func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) er
 		_ = device.Close()
 		return err
 	}
+	c.setActiveSocks(activeSocks)
 	if typ == "native" {
 		if status := c.node.tun.Status(); mtu != 0 && status.MTU != 0 && mtu != status.MTU {
 			c.log.Warnf("Warning: Interface MTU %d automatically adjusted to %d", mtu, status.MTU)
@@ -555,8 +569,49 @@ func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) er
 	return nil
 }
 
-func (c daemonTunController) Detach() error {
-	return c.node.tun.Detach()
+func (c *daemonTunController) Detach() error {
+	if err := c.node.tun.Detach(); err != nil {
+		return err
+	}
+	c.setActiveSocks(nil)
+	return nil
+}
+
+func (c *daemonTunController) GetSocksProxies() admin.TunSocksProxyRouting {
+	c.mu.RLock()
+	active := c.activeSocks
+	c.mu.RUnlock()
+	if active == nil {
+		return admin.TunSocksProxyRouting{
+			Proxies:         configToAdminTunSocksProxies(c.cfg.TunSocksProxies),
+			DefaultProxyURL: c.cfg.TunSocksDefaultProxy,
+		}
+	}
+	return admin.TunSocksProxyRouting{
+		Proxies:         sockstunToAdminProxies(active.Proxies()),
+		DefaultProxyURL: active.DefaultProxyURL(),
+	}
+}
+
+func (c *daemonTunController) SetSocksProxies(routing admin.TunSocksProxyRouting) error {
+	cfgs := adminToSockstunProxies(routing.Proxies)
+	c.mu.RLock()
+	active := c.activeSocks
+	c.mu.RUnlock()
+	if active != nil {
+		if err := active.SetProxies(cfgs, routing.DefaultProxyURL); err != nil {
+			return err
+		}
+	}
+	c.cfg.TunSocksProxies = adminToConfigTunSocksProxies(routing.Proxies)
+	c.cfg.TunSocksDefaultProxy = strings.TrimSpace(routing.DefaultProxyURL)
+	return nil
+}
+
+func (c *daemonTunController) setActiveSocks(active *sockstun.Tun) {
+	c.mu.Lock()
+	c.activeSocks = active
+	c.mu.Unlock()
 }
 
 func parseOptionalUint(value string) (uint64, bool, error) {
@@ -581,6 +636,93 @@ func parseOptionalInt(value string) (int, bool, error) {
 		return 0, false, err
 	}
 	return out, true, nil
+}
+
+func parseOptionalSocksRouting(proxiesValue, defaultProxyValue string, fallbackProxies []config.TunSocksProxyConfig, fallbackDefaultProxy string) ([]sockstun.ProxyConfig, string, error) {
+	proxiesValue = strings.TrimSpace(proxiesValue)
+	if proxiesValue == "" {
+		return configToSockstunProxies(fallbackProxies), strings.TrimSpace(firstNonEmpty(defaultProxyValue, fallbackDefaultProxy)), nil
+	}
+	var proxies []admin.TunSocksProxyConfig
+	if err := json.Unmarshal([]byte(proxiesValue), &proxies); err != nil {
+		return nil, "", fmt.Errorf("socks_proxies: %w", err)
+	}
+	return adminToSockstunProxies(proxies), strings.TrimSpace(firstNonEmpty(defaultProxyValue, fallbackDefaultProxy)), nil
+}
+
+func mustMarshalTunSocksProxies(proxies []config.TunSocksProxyConfig) string {
+	if len(proxies) == 0 {
+		return ""
+	}
+	bs, err := json.Marshal(configToAdminTunSocksProxies(proxies))
+	if err != nil {
+		panic(err)
+	}
+	return string(bs)
+}
+
+func configToSockstunProxies(proxies []config.TunSocksProxyConfig) []sockstun.ProxyConfig {
+	out := make([]sockstun.ProxyConfig, 0, len(proxies))
+	for _, proxy := range proxies {
+		out = append(out, sockstun.ProxyConfig{
+			Filter:   proxy.Filter,
+			ProxyURL: proxy.ProxyURL,
+		})
+	}
+	return out
+}
+
+func configToAdminTunSocksProxies(proxies []config.TunSocksProxyConfig) []admin.TunSocksProxyConfig {
+	out := make([]admin.TunSocksProxyConfig, 0, len(proxies))
+	for _, proxy := range proxies {
+		out = append(out, admin.TunSocksProxyConfig{
+			Filter:   proxy.Filter,
+			ProxyURL: proxy.ProxyURL,
+		})
+	}
+	return out
+}
+
+func adminToConfigTunSocksProxies(proxies []admin.TunSocksProxyConfig) []config.TunSocksProxyConfig {
+	out := make([]config.TunSocksProxyConfig, 0, len(proxies))
+	for _, proxy := range proxies {
+		out = append(out, config.TunSocksProxyConfig{
+			Filter:   strings.TrimSpace(proxy.Filter),
+			ProxyURL: strings.TrimSpace(proxy.ProxyURL),
+		})
+	}
+	return out
+}
+
+func adminToSockstunProxies(proxies []admin.TunSocksProxyConfig) []sockstun.ProxyConfig {
+	out := make([]sockstun.ProxyConfig, 0, len(proxies))
+	for _, proxy := range proxies {
+		out = append(out, sockstun.ProxyConfig{
+			Filter:   proxy.Filter,
+			ProxyURL: proxy.ProxyURL,
+		})
+	}
+	return out
+}
+
+func sockstunToAdminProxies(proxies []sockstun.ProxyConfig) []admin.TunSocksProxyConfig {
+	out := make([]admin.TunSocksProxyConfig, 0, len(proxies))
+	for _, proxy := range proxies {
+		out = append(out, admin.TunSocksProxyConfig{
+			Filter:   proxy.Filter,
+			ProxyURL: proxy.ProxyURL,
+		})
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func setLogLevel(loglevel string, logger *log.Logger) {

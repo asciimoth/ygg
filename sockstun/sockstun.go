@@ -27,6 +27,8 @@ type Config struct {
 	MTU              uint64
 	MWO              int
 	MRO              int
+	Proxies          []ProxyConfig
+	DefaultProxyURL  string
 	HandshakeTimeout time.Duration
 }
 
@@ -34,6 +36,7 @@ type Tun struct {
 	*vtun.VTun
 
 	listener net.Listener
+	network  *routeNetwork
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 	once     sync.Once
@@ -71,6 +74,12 @@ func Create(cfg Config) (*Tun, error) {
 		return nil, fmt.Errorf("build VTun: %w", err)
 	}
 
+	network, err := newRouteNetwork(vt, cfg.Proxies, cfg.DefaultProxyURL)
+	if err != nil {
+		_ = vt.Close()
+		return nil, err
+	}
+
 	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		_ = vt.Close()
@@ -81,6 +90,7 @@ func Create(cfg Config) (*Tun, error) {
 	t := &Tun{
 		VTun:     vt,
 		listener: listener,
+		network:  network,
 		cancel:   cancel,
 		conns:    make(map[net.Conn]struct{}),
 	}
@@ -92,8 +102,10 @@ func Create(cfg Config) (*Tun, error) {
 	server := &socksgo.Server{
 		Auth:              (&protocol.AuthHandlers{}).Add(&protocol.NoAuthHandler{}),
 		Handlers:          handlers,
-		Dialer:            vt.Dial,
-		Listener:          vt.Listen,
+		Dialer:            network.Dial,
+		Listener:          network.Listen,
+		PacketDialer:      network.PacketDial,
+		PacketListener:    network.ListenPacket,
 		Resolver:          vt,
 		DefaultListenHost: cfg.Address.String(),
 		HandshakeTimeout:  cfg.HandshakeTimeout,
@@ -110,6 +122,27 @@ func (t *Tun) SocksAddr() net.Addr {
 		return nil
 	}
 	return t.listener.Addr()
+}
+
+func (t *Tun) SetProxies(cfgs []ProxyConfig, defaultProxyURL string) error {
+	if t == nil || t.network == nil {
+		return net.ErrClosed
+	}
+	return t.network.SetProxies(cfgs, defaultProxyURL)
+}
+
+func (t *Tun) Proxies() []ProxyConfig {
+	if t == nil || t.network == nil {
+		return nil
+	}
+	return t.network.Proxies()
+}
+
+func (t *Tun) DefaultProxyURL() string {
+	if t == nil || t.network == nil {
+		return ""
+	}
+	return t.network.DefaultProxyURL()
 }
 
 func (t *Tun) Close() error {

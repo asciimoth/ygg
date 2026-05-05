@@ -396,6 +396,12 @@ Behavior:
 - Listens on a local TCP address, defaulting to `127.0.0.1:1080`.
 - Configures `socksgo.Server` to use the VTun dialer and listener, so local
   applications can reach Yggdrasil IPv6 services without an OS TUN device.
+- Optionally wraps the VTun in a mutable `gonnect.Network` router. Host filters
+  built with `socksgo.BuildFilter` can send matching CONNECT, BIND, and UDP
+  traffic to a second-hop SOCKS proxy reachable over Yggdrasil while unmatched
+  traffic continues to use VTun directly. A default fallback SOCKS proxy can
+  also handle unmatched non-Yggdrasil destinations; unmatched addresses in
+  `200::/7`, including node addresses and routed node subnets, stay direct.
 - Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
   listener and VTun when detached or replaced.
 
@@ -516,7 +522,10 @@ Runtime wiring is owned by `cmd/yggdrasil`:
 The TUN admin adapter exposes `getTun` and, when a daemon controller is wired
 in, `attachTun`, `replaceTun`, and `detachTun`. `attachTun`/`replaceTun` accept
 the same implementation type names as config (`native`, `sockstun`, `none`)
-plus implementation options such as `socks_listen`, `mtu`, `mwo`, and `mro`.
+plus implementation options such as `socks_listen`, `socks_proxies`,
+`socks_default_proxy`, `mtu`, `mwo`, and `mro`. When the controller supports
+sockstun proxy routing, admin also exposes `getTunSocksProxies` and
+`setTunSocksProxies` for runtime filter and fallback proxy updates.
 
 This keeps admin transport and adapter glue centralized while leaving business
 logic distributed in packages that do not depend on the admin API.

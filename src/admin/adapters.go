@@ -283,13 +283,40 @@ type TunController interface {
 	Detach() error
 }
 
+type TunSocksProxyController interface {
+	GetSocksProxies() TunSocksProxyRouting
+	SetSocksProxies(TunSocksProxyRouting) error
+}
+
 type AttachTunRequest struct {
-	Type        string `json:"type,omitempty"`
-	Name        string `json:"name,omitempty"`
-	MTU         string `json:"mtu,omitempty"`
-	SocksListen string `json:"socks_listen,omitempty"`
-	MWO         string `json:"mwo,omitempty"`
-	MRO         string `json:"mro,omitempty"`
+	Type              string `json:"type,omitempty"`
+	Name              string `json:"name,omitempty"`
+	MTU               string `json:"mtu,omitempty"`
+	SocksListen       string `json:"socks_listen,omitempty"`
+	SocksProxies      string `json:"socks_proxies,omitempty"`
+	SocksDefaultProxy string `json:"socks_default_proxy,omitempty"`
+	MWO               string `json:"mwo,omitempty"`
+	MRO               string `json:"mro,omitempty"`
+}
+
+type TunSocksProxyConfig struct {
+	Filter   string `json:"filter,omitempty"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+}
+
+type GetTunSocksProxiesResponse struct {
+	Proxies         []TunSocksProxyConfig `json:"proxies"`
+	DefaultProxyURL string                `json:"default_proxy_url,omitempty"`
+}
+
+type SetTunSocksProxiesRequest struct {
+	Proxies         string `json:"proxies,omitempty"`
+	DefaultProxyURL string `json:"default_proxy_url,omitempty"`
+}
+
+type TunSocksProxyRouting struct {
+	Proxies         []TunSocksProxyConfig
+	DefaultProxyURL string
 }
 
 func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunController) {
@@ -307,7 +334,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		return
 	}
 	_ = a.AddHandler(
-		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "mwo", "mro"},
+		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -320,7 +347,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		},
 	)
 	_ = a.AddHandler(
-		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "mwo", "mro"},
+		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -341,6 +368,44 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 			return t.Status(), nil
 		},
 	)
+	if proxyController, ok := controller.(TunSocksProxyController); ok {
+		_ = a.AddHandler(
+			"getTunSocksProxies", "Show sockstun second-hop SOCKS proxy routing", []string{},
+			func(_ json.RawMessage) (interface{}, error) {
+				routing := proxyController.GetSocksProxies()
+				return GetTunSocksProxiesResponse{
+					Proxies:         routing.Proxies,
+					DefaultProxyURL: routing.DefaultProxyURL,
+				}, nil
+			},
+		)
+		_ = a.AddHandler(
+			"setTunSocksProxies", "Replace sockstun second-hop SOCKS proxy routing", []string{"proxies", "default_proxy_url"},
+			func(in json.RawMessage) (interface{}, error) {
+				req := SetTunSocksProxiesRequest{}
+				if err := json.Unmarshal(in, &req); err != nil {
+					return nil, err
+				}
+				proxies := []TunSocksProxyConfig{}
+				if strings.TrimSpace(req.Proxies) != "" {
+					if err := json.Unmarshal([]byte(req.Proxies), &proxies); err != nil {
+						return nil, fmt.Errorf("proxies: %w", err)
+					}
+				}
+				if err := proxyController.SetSocksProxies(TunSocksProxyRouting{
+					Proxies:         proxies,
+					DefaultProxyURL: strings.TrimSpace(req.DefaultProxyURL),
+				}); err != nil {
+					return nil, err
+				}
+				routing := proxyController.GetSocksProxies()
+				return GetTunSocksProxiesResponse{
+					Proxies:         routing.Proxies,
+					DefaultProxyURL: routing.DefaultProxyURL,
+				}, nil
+			},
+		)
+	}
 }
 
 func keyToIP(keyHex string) string {

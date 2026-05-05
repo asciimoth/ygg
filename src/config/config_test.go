@@ -111,6 +111,10 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 		IfName: "client-vtun"
 		IfMTU: 1400
 		TunSocksListen: "127.0.0.1:2080"
+		TunSocksProxies: [
+			{ Filter: "0.0.0.0/0", proxy_url: "socks5://[200::1]:1080" }
+		]
+		TunSocksDefaultProxy: "socks5://[300::1]:1080"
 		TunMWO: 12
 		TunMRO: 8
 	}`
@@ -126,6 +130,12 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 	}
 	if cfg.TunSocksListen != "127.0.0.1:2080" || cfg.TunMWO != 12 || cfg.TunMRO != 8 {
 		t.Fatalf("unexpected sockstun options: listen=%q mwo=%d mro=%d", cfg.TunSocksListen, cfg.TunMWO, cfg.TunMRO)
+	}
+	if len(cfg.TunSocksProxies) != 1 || cfg.TunSocksProxies[0].Filter != "0.0.0.0/0" || cfg.TunSocksProxies[0].ProxyURL != "socks5://[200::1]:1080" {
+		t.Fatalf("unexpected sockstun proxies: %#v", cfg.TunSocksProxies)
+	}
+	if cfg.TunSocksDefaultProxy != "socks5://[300::1]:1080" {
+		t.Fatalf("unexpected sockstun default proxy: %q", cfg.TunSocksDefaultProxy)
 	}
 }
 

@@ -18,3 +18,9 @@ Select the transport network with `-transport-network`:
 go run ./examples/http_example -transport-network=native
 go run ./examples/http_example -transport-network=loopback
 ```
+
+The examples are covered by tests. Run them with:
+
+```sh
+go test ./examples/... --race
+```

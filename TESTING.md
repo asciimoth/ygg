@@ -236,6 +236,7 @@ The Docker sockstun suite validates that:
 - `curl` can fetch the native-TUN HTTP server through the local SOCKS proxy
 - Runtime `detachTun`, `attachTun`, and `replaceTun` admin operations update reachability
 - Replacing sockstun onto a new local SOCKS port closes the old proxy and makes the new one usable
+- Runtime `setTunSocksProxies` can route selected or fallback non-Yggdrasil traffic through a public SOCKS gateway inside Yggdrasil while direct Yggdrasil traffic still uses VTun
 
 ### How It Works
 
@@ -250,6 +251,7 @@ For each run it:
 5. Starts a Python HTTP server bound to the server node's Yggdrasil IPv6 address.
 6. Uses `curl --socks5-hostname` inside the client container to fetch that HTTP endpoint.
 7. Mutates the client TUN attachment through `yggdrasilctl detachTun`, `attachTun`, and `replaceTun`.
+8. Starts a public SOCKS gateway on the server's Yggdrasil address, configures the client sockstun fallback proxy at runtime, and verifies clearnet-style traffic reaches the gateway while Yggdrasil traffic remains direct.
 
 ### Prerequisites
 

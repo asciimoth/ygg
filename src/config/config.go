@@ -41,26 +41,28 @@ import (
 // options that are necessary for an Yggdrasil node to run. You will need to
 // supply one of these structs to the Yggdrasil core when starting a node.
 type NodeConfig struct {
-	PrivateKey          KeyBytes                   `json:",omitempty" comment:"Your private key. DO NOT share this with anyone!"`
-	PrivateKeyPath      string                     `json:",omitempty" comment:"The path to your private key file in PEM format."`
-	Certificate         *tls.Certificate           `json:"-"`
-	Peers               []string                   `comment:"List of outbound peer connection strings (e.g. tls://a.b.c.d:e or\nsocks://a.b.c.d:e/f.g.h.i:j). Connection strings can contain options,\nsee https://yggdrasil-network.github.io/configurationref.html#peers.\nYggdrasil has no concept of bootstrap nodes - all network traffic\nwill transit peer connections. Therefore make sure to only peer with\nnearby nodes that have good connectivity and low latency. Avoid adding\npeers to this list from distant countries as this will worsen your\nnode's connectivity and performance considerably."`
-	InterfacePeers      map[string][]string        `comment:"List of connection strings for outbound peer connections in URI format,\narranged by source interface, e.g. { \"eth0\": [ \"tls://a.b.c.d:e\" ] }.\nYou should only use this option if your machine is multi-homed and you\nwant to establish outbound peer connections on different interfaces.\nOtherwise you should use \"Peers\"."`
-	Listen              []string                   `comment:"Listen addresses for incoming connections. You will need to add\nlisteners in order to accept incoming peerings from non-local nodes.\nThis is not required if you wish to establish outbound peerings only.\nMulticast peer discovery will work regardless of any listeners set\nhere. Each listener should be specified in URI format as above, e.g.\ntls://0.0.0.0:0 or tls://[::]:0 to listen on all interfaces."`
-	AdminListen         string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
-	MulticastInterfaces []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
-	AllowedPublicKeys   []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
-	Transport           TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.onion, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. Supported\nnon-null values today are \"native\" or a socks network object with a\nProxyURL such as \"socks5://proxy:1080\"."`
-	AutoPeer            AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
-	TunType             string                     `comment:"TUN implementation to attach at startup. Supported values are\n\"native\", \"sockstun\" and \"none\". \"native\" creates an OS TUN device.\n\"sockstun\" creates a VTun netstack and exposes it through a local SOCKS\nserver for CONNECT and BIND commands."`
-	IfName              string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
-	IfMTU               uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
-	TunSocksListen      string                     `json:",omitempty" comment:"Local TCP listen address for TunType \"sockstun\". The SOCKS server\nproxies CONNECT and BIND through the attached VTun."`
-	TunMWO              int                        `json:",omitempty" comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
-	TunMRO              int                        `json:",omitempty" comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
-	LogLookups          bool                       `json:",omitempty"`
-	NodeInfoPrivacy     bool                       `comment:"By default, nodeinfo contains some defaults including the platform,\narchitecture and Yggdrasil version. These can help when surveying\nthe network and diagnosing network routing problems. Enabling\nnodeinfo privacy prevents this, so that only items specified in\n\"NodeInfo\" are sent back if specified."`
-	NodeInfo            map[string]interface{}     `comment:"Optional nodeinfo. This must be a { \"key\": \"value\", ... } map\nor set as null. This is entirely optional but, if set, is visible\nto the whole network on request."`
+	PrivateKey           KeyBytes                   `json:",omitempty" comment:"Your private key. DO NOT share this with anyone!"`
+	PrivateKeyPath       string                     `json:",omitempty" comment:"The path to your private key file in PEM format."`
+	Certificate          *tls.Certificate           `json:"-"`
+	Peers                []string                   `comment:"List of outbound peer connection strings (e.g. tls://a.b.c.d:e or\nsocks://a.b.c.d:e/f.g.h.i:j). Connection strings can contain options,\nsee https://yggdrasil-network.github.io/configurationref.html#peers.\nYggdrasil has no concept of bootstrap nodes - all network traffic\nwill transit peer connections. Therefore make sure to only peer with\nnearby nodes that have good connectivity and low latency. Avoid adding\npeers to this list from distant countries as this will worsen your\nnode's connectivity and performance considerably."`
+	InterfacePeers       map[string][]string        `comment:"List of connection strings for outbound peer connections in URI format,\narranged by source interface, e.g. { \"eth0\": [ \"tls://a.b.c.d:e\" ] }.\nYou should only use this option if your machine is multi-homed and you\nwant to establish outbound peer connections on different interfaces.\nOtherwise you should use \"Peers\"."`
+	Listen               []string                   `comment:"Listen addresses for incoming connections. You will need to add\nlisteners in order to accept incoming peerings from non-local nodes.\nThis is not required if you wish to establish outbound peerings only.\nMulticast peer discovery will work regardless of any listeners set\nhere. Each listener should be specified in URI format as above, e.g.\ntls://0.0.0.0:0 or tls://[::]:0 to listen on all interfaces."`
+	AdminListen          string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
+	MulticastInterfaces  []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
+	AllowedPublicKeys    []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
+	Transport            TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.onion, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. Supported\nnon-null values today are \"native\" or a socks network object with a\nProxyURL such as \"socks5://proxy:1080\"."`
+	AutoPeer             AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
+	TunType              string                     `comment:"TUN implementation to attach at startup. Supported values are\n\"native\", \"sockstun\" and \"none\". \"native\" creates an OS TUN device.\n\"sockstun\" creates a VTun netstack and exposes it through a local SOCKS\nserver for CONNECT and BIND commands."`
+	IfName               string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
+	IfMTU                uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
+	TunSocksListen       string                     `json:",omitempty" comment:"Local TCP listen address for TunType \"sockstun\". The SOCKS server\nproxies CONNECT and BIND through the attached VTun."`
+	TunSocksProxies      []TunSocksProxyConfig      `json:",omitempty" comment:"Optional second-hop SOCKS proxies used by TunType \"sockstun\". Each\nentry has a Filter in socksgo.BuildFilter format and a ProxyURL such as\n\"socks5://[200::1]:1080\". Matching traffic is sent to that proxy through\nVTun."`
+	TunSocksDefaultProxy string                     `json:",omitempty" comment:"Optional fallback SOCKS proxy URL for TunType \"sockstun\". If set,\nunmatched destinations outside the Yggdrasil 200::/7 address range are\nsent to this proxy through VTun. Unmatched Yggdrasil node and subnet\naddresses stay direct through VTun."`
+	TunMWO               int                        `json:",omitempty" comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
+	TunMRO               int                        `json:",omitempty" comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
+	LogLookups           bool                       `json:",omitempty"`
+	NodeInfoPrivacy      bool                       `comment:"By default, nodeinfo contains some defaults including the platform,\narchitecture and Yggdrasil version. These can help when surveying\nthe network and diagnosing network routing problems. Enabling\nnodeinfo privacy prevents this, so that only items specified in\n\"NodeInfo\" are sent back if specified."`
+	NodeInfo             map[string]interface{}     `comment:"Optional nodeinfo. This must be a { \"key\": \"value\", ... } map\nor set as null. This is entirely optional but, if set, is visible\nto the whole network on request."`
 }
 
 type AutoPeerConfig struct {
@@ -84,6 +86,11 @@ type TransportNetworkConfig struct {
 	null     bool
 	name     string
 	proxyURL string
+}
+
+type TunSocksProxyConfig struct {
+	Filter   string `json:"filter,omitempty" comment:"Destination filter in socksgo.BuildFilter format, for example\n\"*.onion,*.i2p,0.0.0.0/0\" or \"example.com:443\"."`
+	ProxyURL string `json:"proxy_url,omitempty" comment:"SOCKS proxy URL reachable inside Yggdrasil, for example\n\"socks5://[200::1]:1080\"."`
 }
 
 type MulticastInterfaceConfig struct {
@@ -123,6 +130,8 @@ func GenerateConfig() *NodeConfig {
 	cfg.IfName = defaults.DefaultIfName
 	cfg.IfMTU = defaults.DefaultIfMTU
 	cfg.TunSocksListen = "127.0.0.1:1080"
+	cfg.TunSocksProxies = []TunSocksProxyConfig{}
+	cfg.TunSocksDefaultProxy = ""
 	cfg.NodeInfoPrivacy = false
 	if err := cfg.postprocessConfig(); err != nil {
 		panic(err)
@@ -181,6 +190,8 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	if cfg.TunSocksListen == "" {
 		cfg.TunSocksListen = "127.0.0.1:1080"
 	}
+	cfg.TunSocksProxies = normalizeTunSocksProxies(cfg.TunSocksProxies)
+	cfg.TunSocksDefaultProxy = strings.TrimSpace(cfg.TunSocksDefaultProxy)
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
 		f, err := os.ReadFile(cfg.PrivateKeyPath)
@@ -351,6 +362,22 @@ func normalizeStringSlice(values []string) []string {
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func normalizeTunSocksProxies(values []TunSocksProxyConfig) []TunSocksProxyConfig {
+	if len(values) == 0 {
+		return []TunSocksProxyConfig{}
+	}
+	out := make([]TunSocksProxyConfig, 0, len(values))
+	for _, value := range values {
+		value.Filter = strings.TrimSpace(value.Filter)
+		value.ProxyURL = strings.TrimSpace(value.ProxyURL)
+		if value.Filter == "" && value.ProxyURL == "" {
 			continue
 		}
 		out = append(out, value)
