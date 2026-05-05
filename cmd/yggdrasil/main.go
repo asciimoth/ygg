@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,14 +24,15 @@ import (
 	"github.com/hjson/hjson-go/v4"
 	"github.com/kardianos/minwinsvc"
 
+	gtun "github.com/asciimoth/gonnect/tun"
 	"github.com/asciimoth/ygg/autopeer"
 	"github.com/asciimoth/ygg/internal/transportcfg"
+	"github.com/asciimoth/ygg/sockstun"
 	"github.com/asciimoth/ygg/src/address"
 	"github.com/asciimoth/ygg/src/admin"
 	"github.com/asciimoth/ygg/src/config"
-	"github.com/asciimoth/ygg/src/ipv6rwc"
-
 	"github.com/asciimoth/ygg/src/core"
+	"github.com/asciimoth/ygg/src/ipv6rwc"
 	"github.com/asciimoth/ygg/src/multicast"
 	yggtun "github.com/asciimoth/ygg/src/tun"
 	"github.com/asciimoth/ygg/src/version"
@@ -44,6 +46,12 @@ type node struct {
 	multicast *multicast.Multicast
 	autopeer  *autopeer.Manager
 	admin     *admin.AdminSocket
+}
+
+type daemonTunController struct {
+	node *node
+	cfg  *config.NodeConfig
+	log  core.Logger
 }
 
 type multicastCoreAdapter struct {
@@ -335,25 +343,21 @@ func main() {
 		if n.tun, err = yggtun.New(ipv6rwc.NewReadWriteCloser(n.core), logger, options...); err != nil {
 			panic(err)
 		}
-		if cfg.IfName != "none" && cfg.IfName != "dummy" {
-			device, err := tunnative.Create(logger, tunnative.Config{
-				Name:    cfg.IfName,
-				Address: buildTunAddress(n.core.Address()),
-				MTU:     cfg.IfMTU,
-			})
-			if err != nil {
+		controller := daemonTunController{node: n, cfg: cfg, log: logger}
+		if shouldAttachTun(cfg) {
+			if err := controller.Attach(admin.AttachTunRequest{
+				Type:        cfg.TunType,
+				Name:        cfg.IfName,
+				MTU:         fmt.Sprintf("%d", cfg.IfMTU),
+				SocksListen: cfg.TunSocksListen,
+				MWO:         fmt.Sprintf("%d", cfg.TunMWO),
+				MRO:         fmt.Sprintf("%d", cfg.TunMRO),
+			}, false); err != nil {
 				panic(err)
-			}
-			if err := n.tun.Attach(device, yggtun.AttachmentType("native")); err != nil {
-				_ = device.Close()
-				panic(err)
-			}
-			if mtu, err := device.MTU(); err == nil && uint64(mtu) != n.tun.MTU() {
-				logger.Warnf("Warning: Interface MTU %d automatically adjusted to %d", cfg.IfMTU, mtu)
 			}
 		}
 		if n.admin != nil && n.tun != nil {
-			n.admin.SetupTunHandlers(n.tun)
+			n.admin.SetupTunHandlers(n.tun, controller)
 		}
 	}
 
@@ -438,6 +442,137 @@ func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.
 
 func transportNetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Network, error) {
 	return transportcfg.NetworkFromConfig(cfg)
+}
+
+func shouldAttachTun(cfg *config.NodeConfig) bool {
+	switch strings.ToLower(strings.TrimSpace(cfg.TunType)) {
+	case "none", "dummy":
+		return false
+	default:
+		return cfg.IfName != "none" && cfg.IfName != "dummy"
+	}
+}
+
+func (c daemonTunController) Attach(req admin.AttachTunRequest, replace bool) error {
+	typ := strings.ToLower(strings.TrimSpace(req.Type))
+	if typ == "" {
+		typ = c.cfg.TunType
+	}
+	if typ == "" {
+		typ = "native"
+	}
+	if typ == "socks" || typ == "vtun+socks" {
+		typ = "sockstun"
+	}
+	if typ == "none" || typ == "dummy" {
+		return c.node.tun.Detach()
+	}
+
+	mtu := c.cfg.IfMTU
+	if parsed, ok, err := parseOptionalUint(req.MTU); err != nil {
+		return fmt.Errorf("mtu: %w", err)
+	} else if ok {
+		mtu = parsed
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = c.cfg.IfName
+	}
+
+	var device gtun.Tun
+	var err error
+
+	switch typ {
+	case "native":
+		native, err := tunnative.Create(c.log, tunnative.Config{
+			Name:    name,
+			Address: buildTunAddress(c.node.core.Address()),
+			MTU:     mtu,
+		})
+		if err != nil {
+			return err
+		}
+		device = native
+	case "sockstun":
+		mwo := c.cfg.TunMWO
+		if parsed, ok, err := parseOptionalInt(req.MWO); err != nil {
+			return fmt.Errorf("mwo: %w", err)
+		} else if ok {
+			mwo = parsed
+		}
+		mro := c.cfg.TunMRO
+		if parsed, ok, err := parseOptionalInt(req.MRO); err != nil {
+			return fmt.Errorf("mro: %w", err)
+		} else if ok {
+			mro = parsed
+		}
+		listen := strings.TrimSpace(req.SocksListen)
+		if listen == "" {
+			listen = c.cfg.TunSocksListen
+		}
+		if name == "" || name == "auto" {
+			name = sockstun.DefaultName
+		}
+		st, err := sockstun.Create(sockstun.Config{
+			Name:    name,
+			Listen:  listen,
+			Address: c.node.core.Address(),
+			MTU:     mtu,
+			MWO:     mwo,
+			MRO:     mro,
+		})
+		if err != nil {
+			return err
+		}
+		device = st
+	default:
+		return fmt.Errorf("unsupported tun type %q", typ)
+	}
+
+	if replace {
+		err = c.node.tun.Replace(device, yggtun.AttachmentType(typ))
+	} else {
+		err = c.node.tun.Attach(device, yggtun.AttachmentType(typ))
+	}
+	if err != nil {
+		_ = device.Close()
+		return err
+	}
+	if typ == "native" {
+		if status := c.node.tun.Status(); mtu != 0 && status.MTU != 0 && mtu != status.MTU {
+			c.log.Warnf("Warning: Interface MTU %d automatically adjusted to %d", mtu, status.MTU)
+		}
+	}
+	return nil
+}
+
+func (c daemonTunController) Detach() error {
+	return c.node.tun.Detach()
+}
+
+func parseOptionalUint(value string) (uint64, bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false, nil
+	}
+	out, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return 0, false, err
+	}
+	return out, true, nil
+}
+
+func parseOptionalInt(value string) (int, bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false, nil
+	}
+	out, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false, err
+	}
+	return out, true, nil
 }
 
 func setLogLevel(loglevel string, logger *log.Logger) {

@@ -278,10 +278,66 @@ func (a *AdminSocket) SetupMulticastHandlers(m *multicast.Multicast) {
 	)
 }
 
-func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter) {
+type TunController interface {
+	Attach(req AttachTunRequest, replace bool) error
+	Detach() error
+}
+
+type AttachTunRequest struct {
+	Type        string `json:"type,omitempty"`
+	Name        string `json:"name,omitempty"`
+	MTU         string `json:"mtu,omitempty"`
+	SocksListen string `json:"socks_listen,omitempty"`
+	MWO         string `json:"mwo,omitempty"`
+	MRO         string `json:"mro,omitempty"`
+}
+
+func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunController) {
+	var controller TunController
+	if len(controllers) > 0 {
+		controller = controllers[0]
+	}
 	_ = a.AddHandler(
 		"getTun", "Show information about the node's TUN interface", []string{},
 		func(_ json.RawMessage) (interface{}, error) {
+			return t.Status(), nil
+		},
+	)
+	if controller == nil {
+		return
+	}
+	_ = a.AddHandler(
+		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "mwo", "mro"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := AttachTunRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			if err := controller.Attach(req, false); err != nil {
+				return nil, err
+			}
+			return t.Status(), nil
+		},
+	)
+	_ = a.AddHandler(
+		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "mwo", "mro"},
+		func(in json.RawMessage) (interface{}, error) {
+			req := AttachTunRequest{}
+			if err := json.Unmarshal(in, &req); err != nil {
+				return nil, err
+			}
+			if err := controller.Attach(req, true); err != nil {
+				return nil, err
+			}
+			return t.Status(), nil
+		},
+	)
+	_ = a.AddHandler(
+		"detachTun", "Detach the active TUN implementation", []string{},
+		func(_ json.RawMessage) (interface{}, error) {
+			if err := controller.Detach(); err != nil {
+				return nil, err
+			}
 			return t.Status(), nil
 		},
 	)

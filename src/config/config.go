@@ -52,8 +52,12 @@ type NodeConfig struct {
 	AllowedPublicKeys   []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
 	Transport           TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.onion, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. Supported\nnon-null values today are \"native\" or a socks network object with a\nProxyURL such as \"socks5://proxy:1080\"."`
 	AutoPeer            AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
+	TunType             string                     `comment:"TUN implementation to attach at startup. Supported values are\n\"native\", \"sockstun\" and \"none\". \"native\" creates an OS TUN device.\n\"sockstun\" creates a VTun netstack and exposes it through a local SOCKS\nserver for CONNECT and BIND commands."`
 	IfName              string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
 	IfMTU               uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
+	TunSocksListen      string                     `json:",omitempty" comment:"Local TCP listen address for TunType \"sockstun\". The SOCKS server\nproxies CONNECT and BIND through the attached VTun."`
+	TunMWO              int                        `json:",omitempty" comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
+	TunMRO              int                        `json:",omitempty" comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
 	LogLookups          bool                       `json:",omitempty"`
 	NodeInfoPrivacy     bool                       `comment:"By default, nodeinfo contains some defaults including the platform,\narchitecture and Yggdrasil version. These can help when surveying\nthe network and diagnosing network routing problems. Enabling\nnodeinfo privacy prevents this, so that only items specified in\n\"NodeInfo\" are sent back if specified."`
 	NodeInfo            map[string]interface{}     `comment:"Optional nodeinfo. This must be a { \"key\": \"value\", ... } map\nor set as null. This is entirely optional but, if set, is visible\nto the whole network on request."`
@@ -115,8 +119,10 @@ func GenerateConfig() *NodeConfig {
 		CheckInterval: "1m",
 	}
 	cfg.MulticastInterfaces = defaults.DefaultMulticastInterfaces
+	cfg.TunType = "native"
 	cfg.IfName = defaults.DefaultIfName
 	cfg.IfMTU = defaults.DefaultIfMTU
+	cfg.TunSocksListen = "127.0.0.1:1080"
 	cfg.NodeInfoPrivacy = false
 	if err := cfg.postprocessConfig(); err != nil {
 		panic(err)
@@ -165,6 +171,18 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.Transport.normalize()
 	if err := cfg.AutoPeer.normalize(); err != nil {
 		return err
+	}
+	cfg.TunType = strings.ToLower(strings.TrimSpace(cfg.TunType))
+	if cfg.TunType == "" {
+		cfg.TunType = "native"
+	}
+	cfg.IfName = strings.TrimSpace(cfg.IfName)
+	if cfg.IfName == "" {
+		cfg.IfName = "auto"
+	}
+	cfg.TunSocksListen = strings.TrimSpace(cfg.TunSocksListen)
+	if cfg.TunSocksListen == "" {
+		cfg.TunSocksListen = "127.0.0.1:1080"
 	}
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil

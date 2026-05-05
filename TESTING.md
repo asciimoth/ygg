@@ -6,6 +6,7 @@ This repository has three main test layers:
 - A Linux Docker compatibility suite that runs this fork against pinned upstream `yggdrasil-go`
 - A Linux Docker public-autopeering suite that validates runtime autopeer setup through the admin API
 - A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
+- A Linux Docker sockstun suite that validates VTun-backed local SOCKS proxying and runtime TUN swaps
 
 ## Standard Checks
 
@@ -214,3 +215,62 @@ Each run captures:
 - `yggdrasilctl -json getTransport`
 - `yggdrasilctl -json getTun`
 - GOST proxy logs
+
+## Docker Sockstun Suite
+
+Run the Docker sockstun suite with:
+
+```bash
+just test-sockstun
+```
+
+This target also uses `sudo` because it needs Docker access and privileged
+containers.
+
+### What It Tests
+
+The Docker sockstun suite validates that:
+
+- One daemon can run with a native OS TUN and serve HTTP on its Yggdrasil IPv6 address
+- A paired daemon can run with `TunType: sockstun`, exposing a local SOCKS proxy backed by VTun
+- `curl` can fetch the native-TUN HTTP server through the local SOCKS proxy
+- Runtime `detachTun`, `attachTun`, and `replaceTun` admin operations update reachability
+- Replacing sockstun onto a new local SOCKS port closes the old proxy and makes the new one usable
+
+### How It Works
+
+The runner is [tests/compat/run-sockstun.sh](/home/moth/projects/ygg/tests/compat/run-sockstun.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates one native-TUN server config and one `sockstun` client config.
+3. Starts two privileged containers on an isolated Docker network.
+4. Adds a TLS peer from the client container to the server container.
+5. Starts a Python HTTP server bound to the server node's Yggdrasil IPv6 address.
+6. Uses `curl --socks5-hostname` inside the client container to fetch that HTTP endpoint.
+7. Mutates the client TUN attachment through `yggdrasilctl detachTun`, `attachTun`, and `replaceTun`.
+
+### Prerequisites
+
+The Docker sockstun suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+
+### Artifacts
+
+Temporary logs and interface snapshots are written under:
+
+```text
+.tmp/compat/
+```
+
+Each run captures:
+
+- Container logs
+- `ip addr`, `ip route`, and listening socket snapshots
+- `yggdrasilctl -json getSelf`
+- `yggdrasilctl -json getPeers`
+- `yggdrasilctl -json getTun`

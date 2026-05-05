@@ -14,9 +14,11 @@ FROM debian:bookworm-slim
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		ca-certificates \
+		curl \
 		iproute2 \
 		iputils-ping \
 		jq \
+		python3 \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /out/yggdrasil /usr/local/bin/yggdrasil

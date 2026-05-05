@@ -23,6 +23,8 @@ At runtime, the system is composed as:
 8. `tun` supervises a runtime attachment for that IPv6 packet stream.
 9. `tunnative` provides OS-specific native TUN creation/configuration for the
    daemon.
+10. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
+    daemon.
 
 `cmd/yggdrasil` is the composition root. It wires the packages together but
 keeps most behavior inside `src/`.
@@ -48,7 +50,8 @@ Key outputs consumed by other packages:
   `transport.Manager` construction
 - `AdminListen`
 - `MulticastInterfaces`
-- `IfName`, `IfMTU` for daemon-owned native TUN setup
+- `TunType`, `IfName`, `IfMTU`, `TunSocksListen`, `TunMWO`, `TunMRO` for
+  daemon-owned TUN setup
 
 This package is intentionally passive. It does not start services.
 
@@ -377,6 +380,25 @@ Behavior:
 - Returns a generic `gonnect/tun.Tun` so callers can attach it through
   `src/tun` without importing platform-specific details into library packages.
 
+### `sockstun`
+
+Purpose:
+- Create a VTun-backed userspace TUN implementation.
+- Expose a local SOCKS server using `github.com/asciimoth/socksgo`.
+- Proxy SOCKS CONNECT and BIND commands through the attached VTun netstack.
+
+Main API:
+- `sockstun.Create(sockstun.Config) (*sockstun.Tun, error)`
+
+Behavior:
+- Builds a `github.com/asciimoth/gonnect-netstack/vtun.VTun` with the node's
+  Yggdrasil IPv6 address as the local address.
+- Listens on a local TCP address, defaulting to `127.0.0.1:1080`.
+- Configures `socksgo.Server` to use the VTun dialer and listener, so local
+  applications can reach Yggdrasil IPv6 services without an OS TUN device.
+- Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
+  listener and VTun when detached or replaced.
+
 ### `src/address`
 
 Purpose:
@@ -400,9 +422,11 @@ The daemon is intentionally small. Its job is to:
 - register admin adapters for `core`
 - optionally attach `multicast`
 - register admin adapters for `multicast` when enabled
-- create native TUNs through `tunnative` when configured
+- create native TUNs through `tunnative` or SOCKS-backed VTuns through
+  `sockstun` when configured
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
-- register admin adapters for `tun` when attached
+- register admin adapters for `tun`, including runtime attach/detach/replace
+  commands
 - manage shutdown ordering
 
 The daemon does not reimplement protocol logic. It is mostly dependency
@@ -434,8 +458,9 @@ options:
 - `multicast.SetupOption`
 - `tun.SetupOption`
 
-Platform-specific native TUN parameters from config are interpreted in
-`cmd/yggdrasil`, not inside `src/tun`.
+TUN type selection and implementation-specific parameters from config are
+interpreted in `cmd/yggdrasil`, not inside `src/tun`. Native TUN setup is
+delegated to `tunnative`; SOCKS-backed VTun setup is delegated to `sockstun`.
 
 This keeps parsing concerns out of runtime packages.
 
@@ -474,8 +499,9 @@ Below that boundary, the active runtime attachment depends only on
 `gonnect/tun.Tun`, which is what allows native TUNs and VTun-backed
 implementations to share one lifecycle and packet path.
 
-In the default daemon, native attachments are created one layer above this via
-`tunnative.Create(...)` and then explicitly attached to `tun.TunAdapter`.
+In the default daemon, attachments are created one layer above this via
+`tunnative.Create(...)` or `sockstun.Create(...)` and then explicitly attached
+to `tun.TunAdapter`.
 
 ### 5. Local control API
 
@@ -486,6 +512,11 @@ Runtime wiring is owned by `cmd/yggdrasil`:
 - `admin.SetupCoreHandlers()`
 - `admin.SetupMulticastHandlers(...)`
 - `admin.SetupTunHandlers(...)`
+
+The TUN admin adapter exposes `getTun` and, when a daemon controller is wired
+in, `attachTun`, `replaceTun`, and `detachTun`. `attachTun`/`replaceTun` accept
+the same implementation type names as config (`native`, `sockstun`, `none`)
+plus implementation options such as `socks_listen`, `mtu`, `mwo`, and `mro`.
 
 This keeps admin transport and adapter glue centralized while leaving business
 logic distributed in packages that do not depend on the admin API.

@@ -21,5 +21,8 @@ test-autopeer:
 test-transport:
 	sudo ./tests/compat/run-transport.sh
 
-test-total: test test-compat test-autopeer test-transport
+# Docker-based sockstun test between native-TUN and SOCKS-backed local daemons. Uses sudo.
+test-sockstun:
+	sudo ./tests/compat/run-sockstun.sh
 
+test-total: test test-compat test-autopeer test-transport test-sockstun

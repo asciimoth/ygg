@@ -96,6 +96,39 @@ func TestGenerateConfigAutoPeerDefaults(t *testing.T) {
 	}
 }
 
+func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
+	cfg := GenerateConfig()
+
+	if cfg.TunType != "native" {
+		t.Fatalf("unexpected default tun type %q", cfg.TunType)
+	}
+	if cfg.TunSocksListen != "127.0.0.1:1080" {
+		t.Fatalf("unexpected default sockstun listen %q", cfg.TunSocksListen)
+	}
+
+	const raw = `{
+		TunType: sockstun
+		IfName: "client-vtun"
+		IfMTU: 1400
+		TunSocksListen: "127.0.0.1:2080"
+		TunMWO: 12
+		TunMRO: 8
+	}`
+
+	if err := cfg.UnmarshalHJSON([]byte(raw)); err != nil {
+		t.Fatalf("unmarshal sockstun config: %v", err)
+	}
+	if cfg.TunType != "sockstun" {
+		t.Fatalf("unexpected tun type %q", cfg.TunType)
+	}
+	if cfg.IfName != "client-vtun" || cfg.IfMTU != 1400 {
+		t.Fatalf("unexpected tun name/mtu: name=%q mtu=%d", cfg.IfName, cfg.IfMTU)
+	}
+	if cfg.TunSocksListen != "127.0.0.1:2080" || cfg.TunMWO != 12 || cfg.TunMRO != 8 {
+		t.Fatalf("unexpected sockstun options: listen=%q mwo=%d mro=%d", cfg.TunSocksListen, cfg.TunMWO, cfg.TunMRO)
+	}
+}
+
 func TestExampleConfigIncludesAutoPeer(t *testing.T) {
 	examplePath := filepath.Join("..", "..", "example.conf")
 	f, err := os.Open(examplePath)
