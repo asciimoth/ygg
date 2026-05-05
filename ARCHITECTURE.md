@@ -49,6 +49,7 @@ Key outputs consumed by other packages:
 - `Transport.DefaultNetwork`, `Transport.NetworkMappings` for daemon-managed
   `transport.Manager` construction
 - `AdminListen`
+- `LocalDNSListen` for the optional daemon-owned local DNS listener
 - `MulticastInterfaces`
 - `TunType`, `IfName`, `IfMTU`, `TunSocksListen`, `TunMWO`, `TunMRO` for
   daemon-owned TUN setup
@@ -440,6 +441,7 @@ The daemon is intentionally small. Its job is to:
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
 - register admin adapters for `tun`, including runtime attach/detach/replace
   commands
+- optionally run a local DNS server backed by `mnlib.Resolver`
 - manage shutdown ordering
 
 The daemon does not reimplement protocol logic. It is mostly dependency
@@ -474,6 +476,10 @@ options:
 TUN type selection and implementation-specific parameters from config are
 interpreted in `cmd/yggdrasil`, not inside `src/tun`. Native TUN setup is
 delegated to `tunnative`; SOCKS-backed VTun setup is delegated to `sockstun`.
+When `LocalDNSListen` is configured, `cmd/yggdrasil` also owns the local DNS
+server lifecycle. That server answers only `IN A` and `IN AAAA` queries through
+`mnlib.Resolver`; when sockstun is active it uses sockstun's route network, and
+otherwise it uses the native network.
 
 This keeps parsing concerns out of runtime packages.
 

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
 	"github.com/asciimoth/socksgo"
@@ -123,6 +124,13 @@ func (t *Tun) SocksAddr() net.Addr {
 		return nil
 	}
 	return t.listener.Addr()
+}
+
+func (t *Tun) Network() gonnect.Network {
+	if t == nil {
+		return nil
+	}
+	return t.network
 }
 
 func (t *Tun) SetProxies(cfgs []ProxyConfig, defaultProxyURL string) error {

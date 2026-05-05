@@ -48,6 +48,7 @@ type NodeConfig struct {
 	InterfacePeers       map[string][]string        `comment:"List of connection strings for outbound peer connections in URI format,\narranged by source interface, e.g. { \"eth0\": [ \"tls://a.b.c.d:e\" ] }.\nYou should only use this option if your machine is multi-homed and you\nwant to establish outbound peer connections on different interfaces.\nOtherwise you should use \"Peers\"."`
 	Listen               []string                   `comment:"Listen addresses for incoming connections. You will need to add\nlisteners in order to accept incoming peerings from non-local nodes.\nThis is not required if you wish to establish outbound peerings only.\nMulticast peer discovery will work regardless of any listeners set\nhere. Each listener should be specified in URI format as above, e.g.\ntls://0.0.0.0:0 or tls://[::]:0 to listen on all interfaces."`
 	AdminListen          string                     `json:",omitempty" comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead."`
+	LocalDNSListen       string                     `json:",omitempty" comment:"Optional local DNS listen address for mesh-name resolution. When set,\nthe daemon starts a simple local DNS server answering IN A and IN AAAA\nqueries through mnlib.Resolver, for example \"127.0.0.1:5353\"."`
 	MulticastInterfaces  []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
 	AllowedPublicKeys    []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
 	Transport            TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.onion, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. Supported\nnon-null values today are \"native\" or a socks network object with a\nProxyURL such as \"socks5://proxy:1080\"."`
@@ -115,6 +116,7 @@ func GenerateConfig() *NodeConfig {
 	cfg.NewPrivateKey()
 	cfg.Listen = []string{}
 	cfg.AdminListen = defaults.DefaultAdminListen
+	cfg.LocalDNSListen = ""
 	cfg.Peers = []string{}
 	cfg.InterfacePeers = map[string][]string{}
 	cfg.AllowedPublicKeys = []string{}
@@ -198,6 +200,7 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.TunSocksDefaultProxy = strings.TrimSpace(cfg.TunSocksDefaultProxy)
 	cfg.TunSocksDNSFallback = strings.TrimSpace(cfg.TunSocksDNSFallback)
 	cfg.TunSocksNoResolve = normalizeStringSlice(cfg.TunSocksNoResolve)
+	cfg.LocalDNSListen = strings.TrimSpace(cfg.LocalDNSListen)
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
 		f, err := os.ReadFile(cfg.PrivateKeyPath)

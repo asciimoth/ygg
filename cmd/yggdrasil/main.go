@@ -48,6 +48,7 @@ type node struct {
 	multicast *multicast.Multicast
 	autopeer  *autopeer.Manager
 	admin     *admin.AdminSocket
+	localDNS  *localDNSServer
 }
 
 type daemonTunController struct {
@@ -226,6 +227,7 @@ func main() {
 	}
 
 	n := &node{}
+	var tunController *daemonTunController
 
 	// Set up the Yggdrasil node itself.
 	{
@@ -355,6 +357,7 @@ func main() {
 			panic(err)
 		}
 		controller := &daemonTunController{node: n, cfg: cfg, log: logger}
+		tunController = controller
 		if shouldAttachTun(cfg) {
 			if err := controller.Attach(admin.AttachTunRequest{
 				Type:              cfg.TunType,
@@ -373,6 +376,16 @@ func main() {
 		}
 		if n.admin != nil && n.tun != nil {
 			n.admin.SetupTunHandlers(n.tun, controller)
+		}
+	}
+
+	// Set up optional local DNS server.
+	if cfg.LocalDNSListen != "" {
+		if n.localDNS, err = newLocalDNSServer(cfg.LocalDNSListen, localDNSNetwork(tunController), logger); err != nil {
+			panic(err)
+		}
+		if err := n.localDNS.Start(); err != nil {
+			panic(err)
 		}
 	}
 
@@ -417,6 +430,7 @@ func main() {
 	<-ctx.Done()
 
 	// Shut down the node.
+	_ = n.localDNS.Stop()
 	_ = n.admin.Stop()
 	_ = n.autopeer.Close()
 	_ = n.multicast.Stop()
