@@ -363,6 +363,8 @@ func main() {
 				SocksListen:       cfg.TunSocksListen,
 				SocksProxies:      mustMarshalTunSocksProxies(cfg.TunSocksProxies),
 				SocksDefaultProxy: cfg.TunSocksDefaultProxy,
+				SocksDNSFallback:  cfg.TunSocksDNSFallback,
+				SocksNoResolve:    mustMarshalStrings(cfg.TunSocksNoResolve),
 				MWO:               fmt.Sprintf("%d", cfg.TunMWO),
 				MRO:               fmt.Sprintf("%d", cfg.TunMRO),
 			}, false); err != nil {
@@ -532,6 +534,10 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 		if err != nil {
 			return err
 		}
+		dns, err := parseOptionalSocksDNS(req.SocksDNSFallback, req.SocksNoResolve, c.cfg.TunSocksDNSFallback, c.cfg.TunSocksNoResolve)
+		if err != nil {
+			return err
+		}
 		st, err := sockstun.Create(sockstun.Config{
 			Name:            name,
 			Listen:          listen,
@@ -541,6 +547,7 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 			MRO:             mro,
 			Proxies:         proxies,
 			DefaultProxyURL: defaultProxyURL,
+			DNS:             dns,
 		})
 		if err != nil {
 			return err
@@ -608,6 +615,42 @@ func (c *daemonTunController) SetSocksProxies(routing admin.TunSocksProxyRouting
 	return nil
 }
 
+func (c *daemonTunController) GetSocksDNS() admin.TunSocksDNSConfig {
+	c.mu.RLock()
+	active := c.activeSocks
+	c.mu.RUnlock()
+	if active == nil {
+		return admin.TunSocksDNSConfig{
+			FallbackServer: c.cfg.TunSocksDNSFallback,
+			NoResolveZones: append([]string{}, c.cfg.TunSocksNoResolve...),
+		}
+	}
+	dns := active.DNS()
+	return admin.TunSocksDNSConfig{
+		FallbackServer: dns.FallbackServer,
+		NoResolveZones: dns.NoResolveZones,
+	}
+}
+
+func (c *daemonTunController) SetSocksDNS(cfg admin.TunSocksDNSConfig) error {
+	dns := sockstun.DNSConfig{
+		FallbackServer: strings.TrimSpace(cfg.FallbackServer),
+		NoResolveZones: append([]string{}, cfg.NoResolveZones...),
+	}
+	c.mu.RLock()
+	active := c.activeSocks
+	c.mu.RUnlock()
+	if active != nil {
+		if err := active.SetDNS(dns); err != nil {
+			return err
+		}
+		dns = active.DNS()
+	}
+	c.cfg.TunSocksDNSFallback = dns.FallbackServer
+	c.cfg.TunSocksNoResolve = dns.NoResolveZones
+	return nil
+}
+
 func (c *daemonTunController) setActiveSocks(active *sockstun.Tun) {
 	c.mu.Lock()
 	c.activeSocks = active
@@ -650,11 +693,39 @@ func parseOptionalSocksRouting(proxiesValue, defaultProxyValue string, fallbackP
 	return adminToSockstunProxies(proxies), strings.TrimSpace(firstNonEmpty(defaultProxyValue, fallbackDefaultProxy)), nil
 }
 
+func parseOptionalSocksDNS(fallbackValue, noResolveValue, fallbackServer string, fallbackZones []string) (sockstun.DNSConfig, error) {
+	cfg := sockstun.DNSConfig{
+		FallbackServer: strings.TrimSpace(firstNonEmpty(fallbackValue, fallbackServer)),
+		NoResolveZones: append([]string{}, fallbackZones...),
+	}
+	noResolveValue = strings.TrimSpace(noResolveValue)
+	if noResolveValue == "" {
+		return cfg, nil
+	}
+	var zones []string
+	if err := json.Unmarshal([]byte(noResolveValue), &zones); err != nil {
+		return sockstun.DNSConfig{}, fmt.Errorf("socks_no_resolve: %w", err)
+	}
+	cfg.NoResolveZones = zones
+	return cfg, nil
+}
+
 func mustMarshalTunSocksProxies(proxies []config.TunSocksProxyConfig) string {
 	if len(proxies) == 0 {
 		return ""
 	}
 	bs, err := json.Marshal(configToAdminTunSocksProxies(proxies))
+	if err != nil {
+		panic(err)
+	}
+	return string(bs)
+}
+
+func mustMarshalStrings(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	bs, err := json.Marshal(values)
 	if err != nil {
 		panic(err)
 	}

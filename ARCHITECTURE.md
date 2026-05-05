@@ -402,6 +402,13 @@ Behavior:
   traffic continues to use VTun directly. A default fallback SOCKS proxy can
   also handle unmatched non-Yggdrasil destinations; unmatched addresses in
   `200::/7`, including node addresses and routed node subnets, stay direct.
+- Runs mnlib DNS resolution before route selection for sockstun dial/listen
+  operations. Successful lookups replace the hostname with the resolved address
+  before proxy filters or default proxy routing are evaluated. Optional fallback
+  DNS uses `gonnect.ResolverCfg` and sends DNS traffic through the same mutable
+  route network, so fallback DNS obeys sockstun proxy routing too. The protected
+  zones `*.onion`, `*.i2p`, and `*.loki`, plus configured extra no-resolve
+  zones, are never resolved and remain hostnames for routing.
 - Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
   listener and VTun when detached or replaced.
 
@@ -523,9 +530,11 @@ The TUN admin adapter exposes `getTun` and, when a daemon controller is wired
 in, `attachTun`, `replaceTun`, and `detachTun`. `attachTun`/`replaceTun` accept
 the same implementation type names as config (`native`, `sockstun`, `none`)
 plus implementation options such as `socks_listen`, `socks_proxies`,
-`socks_default_proxy`, `mtu`, `mwo`, and `mro`. When the controller supports
-sockstun proxy routing, admin also exposes `getTunSocksProxies` and
-`setTunSocksProxies` for runtime filter and fallback proxy updates.
+`socks_default_proxy`, `socks_dns_fallback`, `socks_no_resolve`, `mtu`, `mwo`,
+and `mro`. When the controller supports sockstun proxy routing, admin also
+exposes `getTunSocksProxies` and `setTunSocksProxies` for runtime filter and
+fallback proxy updates. Sockstun DNS settings are exposed as `getTunSocksDNS`
+and `setTunSocksDNS`.
 
 This keeps admin transport and adapter glue centralized while leaving business
 logic distributed in packages that do not depend on the admin API.

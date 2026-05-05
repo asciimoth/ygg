@@ -288,6 +288,11 @@ type TunSocksProxyController interface {
 	SetSocksProxies(TunSocksProxyRouting) error
 }
 
+type TunSocksDNSController interface {
+	GetSocksDNS() TunSocksDNSConfig
+	SetSocksDNS(TunSocksDNSConfig) error
+}
+
 type AttachTunRequest struct {
 	Type              string `json:"type,omitempty"`
 	Name              string `json:"name,omitempty"`
@@ -295,6 +300,8 @@ type AttachTunRequest struct {
 	SocksListen       string `json:"socks_listen,omitempty"`
 	SocksProxies      string `json:"socks_proxies,omitempty"`
 	SocksDefaultProxy string `json:"socks_default_proxy,omitempty"`
+	SocksDNSFallback  string `json:"socks_dns_fallback,omitempty"`
+	SocksNoResolve    string `json:"socks_no_resolve,omitempty"`
 	MWO               string `json:"mwo,omitempty"`
 	MRO               string `json:"mro,omitempty"`
 }
@@ -319,6 +326,21 @@ type TunSocksProxyRouting struct {
 	DefaultProxyURL string
 }
 
+type GetTunSocksDNSResponse struct {
+	FallbackServer string   `json:"fallback_server,omitempty"`
+	NoResolveZones []string `json:"no_resolve_zones"`
+}
+
+type SetTunSocksDNSRequest struct {
+	FallbackServer string `json:"fallback_server,omitempty"`
+	NoResolveZones string `json:"no_resolve_zones,omitempty"`
+}
+
+type TunSocksDNSConfig struct {
+	FallbackServer string
+	NoResolveZones []string
+}
+
 func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunController) {
 	var controller TunController
 	if len(controllers) > 0 {
@@ -334,7 +356,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		return
 	}
 	_ = a.AddHandler(
-		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "mwo", "mro"},
+		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -347,7 +369,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		},
 	)
 	_ = a.AddHandler(
-		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "mwo", "mro"},
+		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -402,6 +424,44 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 				return GetTunSocksProxiesResponse{
 					Proxies:         routing.Proxies,
 					DefaultProxyURL: routing.DefaultProxyURL,
+				}, nil
+			},
+		)
+	}
+	if dnsController, ok := controller.(TunSocksDNSController); ok {
+		_ = a.AddHandler(
+			"getTunSocksDNS", "Show sockstun DNS resolution settings", []string{},
+			func(_ json.RawMessage) (interface{}, error) {
+				cfg := dnsController.GetSocksDNS()
+				return GetTunSocksDNSResponse{
+					FallbackServer: cfg.FallbackServer,
+					NoResolveZones: cfg.NoResolveZones,
+				}, nil
+			},
+		)
+		_ = a.AddHandler(
+			"setTunSocksDNS", "Replace sockstun DNS resolution settings", []string{"fallback_server", "no_resolve_zones"},
+			func(in json.RawMessage) (interface{}, error) {
+				req := SetTunSocksDNSRequest{}
+				if err := json.Unmarshal(in, &req); err != nil {
+					return nil, err
+				}
+				zones := []string{}
+				if strings.TrimSpace(req.NoResolveZones) != "" {
+					if err := json.Unmarshal([]byte(req.NoResolveZones), &zones); err != nil {
+						return nil, fmt.Errorf("no_resolve_zones: %w", err)
+					}
+				}
+				if err := dnsController.SetSocksDNS(TunSocksDNSConfig{
+					FallbackServer: strings.TrimSpace(req.FallbackServer),
+					NoResolveZones: zones,
+				}); err != nil {
+					return nil, err
+				}
+				cfg := dnsController.GetSocksDNS()
+				return GetTunSocksDNSResponse{
+					FallbackServer: cfg.FallbackServer,
+					NoResolveZones: cfg.NoResolveZones,
 				}, nil
 			},
 		)

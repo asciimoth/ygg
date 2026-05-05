@@ -58,6 +58,8 @@ type NodeConfig struct {
 	TunSocksListen       string                     `json:",omitempty" comment:"Local TCP listen address for TunType \"sockstun\". The SOCKS server\nproxies CONNECT and BIND through the attached VTun."`
 	TunSocksProxies      []TunSocksProxyConfig      `json:",omitempty" comment:"Optional second-hop SOCKS proxies used by TunType \"sockstun\". Each\nentry has a Filter in socksgo.BuildFilter format and a ProxyURL such as\n\"socks5://[200::1]:1080\". Matching traffic is sent to that proxy through\nVTun."`
 	TunSocksDefaultProxy string                     `json:",omitempty" comment:"Optional fallback SOCKS proxy URL for TunType \"sockstun\". If set,\nunmatched destinations outside the Yggdrasil 200::/7 address range are\nsent to this proxy through VTun. Unmatched Yggdrasil node and subnet\naddresses stay direct through VTun."`
+	TunSocksDNSFallback  string                     `json:",omitempty" comment:"Optional fallback DNS server for TunType \"sockstun\", for example\n\"[300:6223::53]:53\". Sockstun first tries mnlib mesh-name resolution\nfor SOCKS CONNECT/BIND and packet operations. If this fallback is set,\nother names are resolved by DNS requests sent through the same sockstun\nrouting pipeline, including second-hop and default proxy routing."`
+	TunSocksNoResolve    []string                   `json:",omitempty" comment:"Additional DNS zones that TunType \"sockstun\" must never resolve before\nrouting. The built-in protected zones are *.onion, *.i2p and *.loki.\nEntries may be written as \"example\", \".example\" or \"*.example\"."`
 	TunMWO               int                        `json:",omitempty" comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
 	TunMRO               int                        `json:",omitempty" comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
 	LogLookups           bool                       `json:",omitempty"`
@@ -132,6 +134,8 @@ func GenerateConfig() *NodeConfig {
 	cfg.TunSocksListen = "127.0.0.1:1080"
 	cfg.TunSocksProxies = []TunSocksProxyConfig{}
 	cfg.TunSocksDefaultProxy = ""
+	cfg.TunSocksDNSFallback = ""
+	cfg.TunSocksNoResolve = []string{}
 	cfg.NodeInfoPrivacy = false
 	if err := cfg.postprocessConfig(); err != nil {
 		panic(err)
@@ -192,6 +196,8 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	}
 	cfg.TunSocksProxies = normalizeTunSocksProxies(cfg.TunSocksProxies)
 	cfg.TunSocksDefaultProxy = strings.TrimSpace(cfg.TunSocksDefaultProxy)
+	cfg.TunSocksDNSFallback = strings.TrimSpace(cfg.TunSocksDNSFallback)
+	cfg.TunSocksNoResolve = normalizeStringSlice(cfg.TunSocksNoResolve)
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
 		f, err := os.ReadFile(cfg.PrivateKeyPath)

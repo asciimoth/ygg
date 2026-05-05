@@ -115,6 +115,8 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 			{ Filter: "0.0.0.0/0", proxy_url: "socks5://[200::1]:1080" }
 		]
 		TunSocksDefaultProxy: "socks5://[300::1]:1080"
+		TunSocksDNSFallback: "[300:6223::53]:53"
+		TunSocksNoResolve: ["*.alt", " .mesh.local "]
 		TunMWO: 12
 		TunMRO: 8
 	}`
@@ -136,6 +138,12 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 	}
 	if cfg.TunSocksDefaultProxy != "socks5://[300::1]:1080" {
 		t.Fatalf("unexpected sockstun default proxy: %q", cfg.TunSocksDefaultProxy)
+	}
+	if cfg.TunSocksDNSFallback != "[300:6223::53]:53" {
+		t.Fatalf("unexpected sockstun DNS fallback: %q", cfg.TunSocksDNSFallback)
+	}
+	if len(cfg.TunSocksNoResolve) != 2 || cfg.TunSocksNoResolve[0] != "*.alt" || cfg.TunSocksNoResolve[1] != ".mesh.local" {
+		t.Fatalf("unexpected sockstun no-resolve zones: %#v", cfg.TunSocksNoResolve)
 	}
 }
 

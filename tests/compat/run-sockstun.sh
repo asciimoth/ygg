@@ -16,6 +16,7 @@ CLIENT_LISTEN_PORT="${CLIENT_LISTEN_PORT:-11002}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 CLEARNET_HTTP_PORT="${CLEARNET_HTTP_PORT:-8081}"
 PUBLIC_SOCKS_PORT="${PUBLIC_SOCKS_PORT:-1080}"
+DNS_PORT="${DNS_PORT:-5353}"
 ADMIN_ENDPOINT="unix:///var/run/yggdrasil.sock"
 
 SERVER_DIR="${TMP_DIR}/server"
@@ -257,6 +258,44 @@ PY
 nohup python3 /tmp/public_socks.py ${listen_addr} ${listen_port} >/tmp/public-socks.log 2>&1 &"
 }
 
+start_dns_server() {
+	local cont="$1"
+	local listen_addr="$2"
+	local listen_port="$3"
+
+	docker_shell "${cont}" "cat >/tmp/sockstun_dns.py <<'PY'
+import socket
+import struct
+import sys
+
+listen_host = sys.argv[1]
+listen_port = int(sys.argv[2])
+
+def question_end(data, offset):
+    while data[offset] != 0:
+        offset += data[offset] + 1
+    return offset + 1
+
+server = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+server.bind((listen_host, listen_port))
+while True:
+    data, addr = server.recvfrom(512)
+    try:
+        end = question_end(data, 12)
+        qtype, qclass = struct.unpack('!HH', data[end:end + 4])
+        header = data[:2] + b'\\x81\\x80' + data[4:6] + b'\\x00\\x01\\x00\\x00\\x00\\x00'
+        question = data[12:end + 4]
+        answer = b'\\xc0\\x0c' + struct.pack('!HHIH', 1, 1, 30, 4) + socket.inet_aton('127.0.0.1')
+        if qtype != 1 or qclass != 1:
+            header = data[:2] + b'\\x81\\x83' + data[4:6] + b'\\x00\\x00\\x00\\x00\\x00\\x00'
+            answer = b''
+        server.sendto(header + question + answer, addr)
+    except Exception:
+        pass
+PY
+nohup python3 /tmp/sockstun_dns.py ${listen_addr} ${listen_port} >/tmp/sockstun-dns.log 2>&1 &"
+}
+
 render_config() {
 	local image="$1"
 	local listen_port="$2"
@@ -338,6 +377,8 @@ docker_shell "${SERVER_CONT}" "mkdir -p /tmp/clearnet && printf clearnet-ok >/tm
 wait_for_cmd "${SERVER_CONT}" "ss -ltn | grep -q ':${CLEARNET_HTTP_PORT}'"
 start_public_socks_proxy "${SERVER_CONT}" "${SERVER_ADDR}" "${PUBLIC_SOCKS_PORT}"
 wait_for_cmd "${SERVER_CONT}" "ss -ltn | grep -q ':${PUBLIC_SOCKS_PORT}'"
+start_dns_server "${SERVER_CONT}" "${SERVER_ADDR}" "${DNS_PORT}"
+wait_for_cmd "${SERVER_CONT}" "ss -lun | grep -q ':${DNS_PORT}'"
 
 log "scenario 1: curl reaches native TUN HTTP server through sockstun"
 wait_for_curl_success "127.0.0.1:1080"
@@ -368,5 +409,11 @@ log "scenario 7: clearing runtime sockstun default proxy routing restores direct
 run docker exec "${CLIENT_CONT}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" setTunSocksProxies "proxies=[]"
 wait_for_proxy_curl_failure "127.0.0.1:1081" "http://127.0.0.1:${CLEARNET_HTTP_PORT}/"
 wait_for_curl_success "127.0.0.1:1081"
+
+log "scenario 8: runtime fallback DNS resolves hostnames through the sockstun routing pipeline"
+DNS_SERVER="$(printf '[%s]:%s' "${SERVER_ADDR}" "${DNS_PORT}")"
+run docker exec "${CLIENT_CONT}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" setTunSocksProxies "proxies=[]" "default_proxy_url=${DEFAULT_PROXY_URL}"
+run docker exec "${CLIENT_CONT}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" setTunSocksDNS "fallback_server=${DNS_SERVER}" "no_resolve_zones=[\"*.blocked\"]"
+wait_for_proxy_curl_success "127.0.0.1:1081" "http://sockstun-dns.test:${CLEARNET_HTTP_PORT}/" "clearnet-ok"
 
 log "sockstun compatibility suite completed successfully"

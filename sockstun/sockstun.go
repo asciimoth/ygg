@@ -29,6 +29,7 @@ type Config struct {
 	MRO              int
 	Proxies          []ProxyConfig
 	DefaultProxyURL  string
+	DNS              DNSConfig
 	HandshakeTimeout time.Duration
 }
 
@@ -74,7 +75,7 @@ func Create(cfg Config) (*Tun, error) {
 		return nil, fmt.Errorf("build VTun: %w", err)
 	}
 
-	network, err := newRouteNetwork(vt, cfg.Proxies, cfg.DefaultProxyURL)
+	network, err := newRouteNetwork(vt, cfg.Proxies, cfg.DefaultProxyURL, cfg.DNS)
 	if err != nil {
 		_ = vt.Close()
 		return nil, err
@@ -143,6 +144,20 @@ func (t *Tun) DefaultProxyURL() string {
 		return ""
 	}
 	return t.network.DefaultProxyURL()
+}
+
+func (t *Tun) SetDNS(cfg DNSConfig) error {
+	if t == nil || t.network == nil {
+		return net.ErrClosed
+	}
+	return t.network.SetDNS(cfg)
+}
+
+func (t *Tun) DNS() DNSConfig {
+	if t == nil || t.network == nil {
+		return DNSConfig{}
+	}
+	return t.network.DNS()
 }
 
 func (t *Tun) Close() error {

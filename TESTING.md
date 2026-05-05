@@ -237,6 +237,7 @@ The Docker sockstun suite validates that:
 - Runtime `detachTun`, `attachTun`, and `replaceTun` admin operations update reachability
 - Replacing sockstun onto a new local SOCKS port closes the old proxy and makes the new one usable
 - Runtime `setTunSocksProxies` can route selected or fallback non-Yggdrasil traffic through a public SOCKS gateway inside Yggdrasil while direct Yggdrasil traffic still uses VTun
+- Runtime `setTunSocksDNS` can resolve ordinary hostnames through a fallback DNS server reached through the same sockstun route pipeline
 
 ### How It Works
 
@@ -252,6 +253,7 @@ For each run it:
 6. Uses `curl --socks5-hostname` inside the client container to fetch that HTTP endpoint.
 7. Mutates the client TUN attachment through `yggdrasilctl detachTun`, `attachTun`, and `replaceTun`.
 8. Starts a public SOCKS gateway on the server's Yggdrasil address, configures the client sockstun fallback proxy at runtime, and verifies clearnet-style traffic reaches the gateway while Yggdrasil traffic remains direct.
+9. Starts a DNS server on the server's Yggdrasil address, configures client sockstun fallback DNS at runtime, and verifies hostname resolution is routed through sockstun.
 
 ### Prerequisites
 
