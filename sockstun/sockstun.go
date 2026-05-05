@@ -96,26 +96,25 @@ func Create(cfg Config) (*Tun, error) {
 		conns:    make(map[net.Conn]struct{}),
 	}
 
-	handlers := map[protocol.Cmd]socksgo.CommandHandler{
-		protocol.CmdConnect: socksgo.DefaultConnectHandler,
-		protocol.CmdBind:    socksgo.DefaultBindHandler,
-	}
-	server := &socksgo.Server{
-		Auth:              (&protocol.AuthHandlers{}).Add(&protocol.NoAuthHandler{}),
-		Handlers:          handlers,
-		Dialer:            network.Dial,
-		Listener:          network.Listen,
-		PacketDialer:      network.PacketDial,
-		PacketListener:    network.ListenPacket,
-		Resolver:          vt,
-		DefaultListenHost: cfg.Address.String(),
-		HandshakeTimeout:  cfg.HandshakeTimeout,
-	}
+	server := newSocksServer(cfg, network)
 
 	t.wg.Add(1)
 	go t.serve(ctx, server)
 
 	return t, nil
+}
+
+func newSocksServer(cfg Config, network *routeNetwork) *socksgo.Server {
+	return &socksgo.Server{
+		Auth:              (&protocol.AuthHandlers{}).Add(&protocol.NoAuthHandler{}),
+		Dialer:            network.Dial,
+		Listener:          network.Listen,
+		PacketDialer:      network.PacketDial,
+		PacketListener:    network.ListenPacket,
+		Resolver:          network,
+		DefaultListenHost: cfg.Address.String(),
+		HandshakeTimeout:  cfg.HandshakeTimeout,
+	}
 }
 
 func (t *Tun) SocksAddr() net.Addr {

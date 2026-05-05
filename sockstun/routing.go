@@ -195,6 +195,170 @@ func (n *routeNetwork) ListenUDP(ctx context.Context, network, laddr string) (go
 	return n.networkFor(network, laddr).ListenUDP(ctx, network, laddr)
 }
 
+func (n *routeNetwork) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+	host = normalizeHost(host)
+	if host == "" {
+		return nil, noSuchHost(host)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		ips := filterIPsByNetwork([]net.IP{ip}, network)
+		if len(ips) == 0 {
+			return nil, noSuchHost(host)
+		}
+		return ips, nil
+	}
+	if !n.shouldSkipResolve(host) {
+		if ips, err := n.lookupIPViaRouteResolver(ctx, network, host); err == nil && len(ips) > 0 {
+			return ips, nil
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupIP(ctx, network, host)
+	}
+	return nil, noSuchHost(host)
+}
+
+func (n *routeNetwork) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	ips, err := n.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]net.IPAddr, 0, len(ips))
+	for _, ip := range ips {
+		out = append(out, net.IPAddr{IP: ip})
+	}
+	return out, nil
+}
+
+func (n *routeNetwork) LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error) {
+	ips, err := n.LookupIP(ctx, network, host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]netip.Addr, 0, len(ips))
+	for _, ip := range ips {
+		if addr, ok := netip.AddrFromSlice(ip); ok {
+			out = append(out, addr.Unmap())
+		}
+	}
+	if len(out) == 0 {
+		return nil, noSuchHost(host)
+	}
+	return out, nil
+}
+
+func (n *routeNetwork) LookupHost(ctx context.Context, host string) ([]string, error) {
+	ips, err := n.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		out = append(out, ip.String())
+	}
+	return out, nil
+}
+
+func (n *routeNetwork) LookupAddr(ctx context.Context, addr string) ([]string, error) {
+	if names, err := n.lookupAddrViaRouteResolver(ctx, addr); err == nil && len(names) > 0 {
+		return names, nil
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupAddr(ctx, addr)
+	}
+	return nil, noSuchHost(addr)
+}
+
+func (n *routeNetwork) LookupCNAME(ctx context.Context, host string) (string, error) {
+	if !n.shouldSkipResolve(host) {
+		n.mu.RLock()
+		resolver := n.resolver
+		n.mu.RUnlock()
+		if resolver != nil {
+			if cname, err := resolver.LookupCNAME(ctx, host); err == nil && cname != "" {
+				return cname, nil
+			}
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupCNAME(ctx, host)
+	}
+	return "", noSuchHost(host)
+}
+
+func (n *routeNetwork) LookupPort(ctx context.Context, network, service string) (int, error) {
+	return gonnect.LookupPortOffline(network, service)
+}
+
+func (n *routeNetwork) LookupNS(ctx context.Context, name string) ([]*net.NS, error) {
+	if !n.shouldSkipResolve(name) {
+		n.mu.RLock()
+		resolver := n.resolver
+		n.mu.RUnlock()
+		if resolver != nil {
+			if records, err := resolver.LookupNS(ctx, name); err == nil && len(records) > 0 {
+				return records, nil
+			}
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupNS(ctx, name)
+	}
+	return nil, noSuchHost(name)
+}
+
+func (n *routeNetwork) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
+	if !n.shouldSkipResolve(name) {
+		n.mu.RLock()
+		resolver := n.resolver
+		n.mu.RUnlock()
+		if resolver != nil {
+			if records, err := resolver.LookupMX(ctx, name); err == nil && len(records) > 0 {
+				return records, nil
+			}
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupMX(ctx, name)
+	}
+	return nil, noSuchHost(name)
+}
+
+func (n *routeNetwork) LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, error) {
+	if !n.shouldSkipResolve(name) {
+		n.mu.RLock()
+		resolver := n.resolver
+		n.mu.RUnlock()
+		if resolver != nil {
+			cname, records, err := resolver.LookupSRV(ctx, service, proto, name)
+			if err == nil && len(records) > 0 {
+				return cname, records, nil
+			}
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupSRV(ctx, service, proto, name)
+	}
+	return "", nil, noSuchHost(name)
+}
+
+func (n *routeNetwork) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	if !n.shouldSkipResolve(name) {
+		n.mu.RLock()
+		resolver := n.resolver
+		n.mu.RUnlock()
+		if resolver != nil {
+			if records, err := resolver.LookupTXT(ctx, name); err == nil && len(records) > 0 {
+				return records, nil
+			}
+		}
+	}
+	if resolver, ok := n.direct.(gonnect.Resolver); ok {
+		return resolver.LookupTXT(ctx, name)
+	}
+	return nil, noSuchHost(name)
+}
+
 func (n *routeNetwork) resolveAddress(ctx context.Context, network, address string) string {
 	host, port, ok := splitAddress(address)
 	if !ok || host == "" || isIPLiteral(host) || n.shouldSkipResolve(host) {
@@ -220,6 +384,34 @@ func (n *routeNetwork) resolveAddress(ctx context.Context, network, address stri
 		return ip.String()
 	}
 	return net.JoinHostPort(ip.String(), port)
+}
+
+func (n *routeNetwork) lookupIPViaRouteResolver(ctx context.Context, network, host string) ([]net.IP, error) {
+	n.mu.RLock()
+	resolver := n.resolver
+	n.mu.RUnlock()
+	if resolver == nil {
+		return nil, noSuchHost(host)
+	}
+	ips, err := resolver.LookupIP(ctx, gonnecthelpers.FamilyFromNetwork(network), host)
+	if err != nil {
+		return nil, err
+	}
+	ips = filterIPsByNetwork(ips, network)
+	if len(ips) == 0 {
+		return nil, noSuchHost(host)
+	}
+	return ips, nil
+}
+
+func (n *routeNetwork) lookupAddrViaRouteResolver(ctx context.Context, addr string) ([]string, error) {
+	n.mu.RLock()
+	resolver := n.resolver
+	n.mu.RUnlock()
+	if resolver == nil {
+		return nil, noSuchHost(addr)
+	}
+	return resolver.LookupAddr(ctx, addr)
 }
 
 func (n *routeNetwork) shouldSkipResolve(host string) bool {
@@ -279,6 +471,34 @@ func splitAddress(address string) (host, port string, ok bool) {
 func isIPLiteral(host string) bool {
 	_, err := netip.ParseAddr(strings.Trim(host, "[]"))
 	return err == nil
+}
+
+func filterIPsByNetwork(ips []net.IP, network string) []net.IP {
+	family := gonnecthelpers.FamilyFromNetwork(network)
+	out := make([]net.IP, 0, len(ips))
+	for _, ip := range ips {
+		if ip == nil {
+			continue
+		}
+		if ip.To4() != nil {
+			if family == "ip" || family == "ip4" {
+				out = append(out, ip)
+			}
+			continue
+		}
+		if ip.To16() != nil && (family == "ip" || family == "ip6") {
+			out = append(out, ip)
+		}
+	}
+	return out
+}
+
+func noSuchHost(host string) error {
+	return &net.DNSError{
+		Err:        "no such host",
+		Name:       host,
+		IsNotFound: true,
+	}
 }
 
 func normalizeHost(host string) string {

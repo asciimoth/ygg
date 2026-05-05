@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/asciimoth/gonnect"
+	"github.com/asciimoth/socksgo"
 )
 
 func TestCreateStartsLocalSocksListener(t *testing.T) {
@@ -38,6 +39,25 @@ func TestCreateStartsLocalSocksListener(t *testing.T) {
 	}
 }
 
+func TestSocksServerUsesAllSocksgoDefaultCommandHandlers(t *testing.T) {
+	network := &routeNetwork{}
+	server := newSocksServer(Config{
+		Address: net.ParseIP("200::1"),
+	}, network)
+
+	if server.Handlers != nil {
+		t.Fatal("expected nil handler map so socksgo default handlers are used")
+	}
+	if server.Resolver != network {
+		t.Fatal("expected socks server RESOLVE commands to use route network resolver")
+	}
+	for cmd := range socksgo.DefaultCommandHandlers {
+		if server.GetHandler(cmd) == nil {
+			t.Fatalf("missing socksgo default handler for %s", cmd)
+		}
+	}
+}
+
 func TestRouteNetworkResolvesBeforeRouting(t *testing.T) {
 	direct := &recordNetwork{}
 	n, err := newRouteNetwork(direct, nil, "", DNSConfig{})
@@ -54,6 +74,46 @@ func TestRouteNetworkResolvesBeforeRouting(t *testing.T) {
 	}
 	if direct.lastAddress != "[200::1234]:80" {
 		t.Fatalf("address was not rewritten by DNS, dialed %q", direct.lastAddress)
+	}
+}
+
+func TestRouteNetworkLookupIPUsesSameResolverPath(t *testing.T) {
+	direct := &recordNetwork{}
+	n, err := newRouteNetwork(direct, nil, "", DNSConfig{})
+	if err != nil {
+		t.Fatalf("newRouteNetwork: %v", err)
+	}
+	n.mu.Lock()
+	n.resolver = fakeResolver{ips: []net.IP{net.ParseIP("200::1234"), net.ParseIP("127.0.0.1")}}
+	n.mu.Unlock()
+
+	ips, err := n.LookupIP(context.Background(), "tcp6", "mesh.example")
+	if err != nil {
+		t.Fatalf("LookupIP: %v", err)
+	}
+	if len(ips) != 1 || !ips[0].Equal(net.ParseIP("200::1234")) {
+		t.Fatalf("LookupIP returned %#v, want only 200::1234", ips)
+	}
+}
+
+func TestRouteNetworkLookupIPFallsBackToDirectResolver(t *testing.T) {
+	direct := &recordNetwork{
+		resolverIPs: []net.IP{net.ParseIP("200::abcd")},
+	}
+	n, err := newRouteNetwork(direct, nil, "", DNSConfig{})
+	if err != nil {
+		t.Fatalf("newRouteNetwork: %v", err)
+	}
+	n.mu.Lock()
+	n.resolver = fakeResolver{err: &net.DNSError{Err: "no such host", Name: "custom.example", IsNotFound: true}}
+	n.mu.Unlock()
+
+	ips, err := n.LookupIP(context.Background(), "ip6", "custom.example")
+	if err != nil {
+		t.Fatalf("LookupIP: %v", err)
+	}
+	if len(ips) != 1 || !ips[0].Equal(net.ParseIP("200::abcd")) {
+		t.Fatalf("LookupIP returned %#v, want direct resolver result", ips)
 	}
 }
 
@@ -98,6 +158,7 @@ func TestIsYggdrasilAddressIncludesNodeAndSubnetRanges(t *testing.T) {
 type recordNetwork struct {
 	lastNetwork string
 	lastAddress string
+	resolverIPs []net.IP
 }
 
 func (n *recordNetwork) IsNative() bool { return false }
@@ -150,11 +211,74 @@ func (n *recordNetwork) ListenUDP(_ context.Context, network, laddr string) (gon
 	return nil, nil
 }
 
+func (n *recordNetwork) LookupIP(_ context.Context, _, host string) ([]net.IP, error) {
+	if len(n.resolverIPs) == 0 {
+		return nil, noSuchHost(host)
+	}
+	return n.resolverIPs, nil
+}
+
+func (n *recordNetwork) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	ips, err := n.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]net.IPAddr, 0, len(ips))
+	for _, ip := range ips {
+		out = append(out, net.IPAddr{IP: ip})
+	}
+	return out, nil
+}
+
+func (n *recordNetwork) LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error) {
+	ips, err := n.LookupIP(ctx, network, host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]netip.Addr, 0, len(ips))
+	for _, ip := range ips {
+		if addr, ok := netip.AddrFromSlice(ip); ok {
+			out = append(out, addr)
+		}
+	}
+	return out, nil
+}
+
+func (n *recordNetwork) LookupHost(ctx context.Context, host string) ([]string, error) {
+	ips, err := n.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		out = append(out, ip.String())
+	}
+	return out, nil
+}
+
+func (n *recordNetwork) LookupAddr(context.Context, string) ([]string, error) { return nil, nil }
+func (n *recordNetwork) LookupCNAME(_ context.Context, host string) (string, error) {
+	return host, nil
+}
+func (n *recordNetwork) LookupPort(_ context.Context, network, service string) (int, error) {
+	return gonnect.LookupPortOffline(network, service)
+}
+func (n *recordNetwork) LookupNS(context.Context, string) ([]*net.NS, error) { return nil, nil }
+func (n *recordNetwork) LookupMX(context.Context, string) ([]*net.MX, error) { return nil, nil }
+func (n *recordNetwork) LookupSRV(context.Context, string, string, string) (string, []*net.SRV, error) {
+	return "", nil, nil
+}
+func (n *recordNetwork) LookupTXT(context.Context, string) ([]string, error) { return nil, nil }
+
 type fakeResolver struct {
 	ips []net.IP
+	err error
 }
 
 func (r fakeResolver) LookupIP(context.Context, string, string) ([]net.IP, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
 	return r.ips, nil
 }
 

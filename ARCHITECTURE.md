@@ -385,7 +385,7 @@ Behavior:
 Purpose:
 - Create a VTun-backed userspace TUN implementation.
 - Expose a local SOCKS server using `github.com/asciimoth/socksgo`.
-- Proxy SOCKS CONNECT and BIND commands through the attached VTun netstack.
+- Proxy the default `socksgo` command set through the attached VTun netstack.
 
 Main API:
 - `sockstun.Create(sockstun.Config) (*sockstun.Tun, error)`
@@ -397,8 +397,8 @@ Behavior:
 - Configures `socksgo.Server` to use the VTun dialer and listener, so local
   applications can reach Yggdrasil IPv6 services without an OS TUN device.
 - Optionally wraps the VTun in a mutable `gonnect.Network` router. Host filters
-  built with `socksgo.BuildFilter` can send matching CONNECT, BIND, and UDP
-  traffic to a second-hop SOCKS proxy reachable over Yggdrasil while unmatched
+  built with `socksgo.BuildFilter` can send matching CONNECT, BIND, UDP, and
+  extension traffic to a second-hop SOCKS proxy reachable over Yggdrasil while unmatched
   traffic continues to use VTun directly. A default fallback SOCKS proxy can
   also handle unmatched non-Yggdrasil destinations; unmatched addresses in
   `200::/7`, including node addresses and routed node subnets, stay direct.
