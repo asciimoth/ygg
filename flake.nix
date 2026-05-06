@@ -75,6 +75,8 @@
           commitizen
 
           just
+
+          coverage-reporter
         ];
       };
     });

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - develop
+  pull_request:
+
+permissions:
+  contents: read #  to fetch code (actions/checkout)
+
+jobs:
+  test-push:
+    name: Go test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Tor
+        run: |
+          sudo apt-get install -y tor
+      - name: Start Tor
+        run: |
+          sudo systemctl start tor --now
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Run tests with testhooks
+        run: nix develop --command just coverage
+      - name: Send coverage
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+        run: "nix develop --command coveralls report coverage.out"
+  typos:
+    name: Check for typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - run: nix develop --command typos --exclude .golangci.yml
+  commitizen-pr:
+    name: Lint git commits
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # ensure we check the PR branch tip rather than the auto-created merge ref
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Check all commits in PR
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # ensure the base branch ref exists locally
+          git fetch origin "$BASE_REF":"$BASE_REF" || true
+          BASE_MERGE=$(git merge-base origin/${BASE_REF} HEAD)
+          nix develop --command cz check --rev-range "${BASE_MERGE}..HEAD"
+  test-pr:
+    name: Go test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - run: nix develop --command just test

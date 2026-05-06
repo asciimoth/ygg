@@ -3,6 +3,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 test:
 	go test ./ygglib/... ./yggd/... ./examples/... --race -count=1
 
+coverage:
+	go test ./ygglib/... ./yggd/... ./examples/... -coverprofile=coverage.out -coverpkg=./...
+
 vet:
 	go vet ./ygglib/... ./yggd/... ./examples/...
 
