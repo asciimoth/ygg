@@ -35,29 +35,29 @@ func create(log Logger, cfg Config) (gtun.Tun, error) {
 		tuntap.WintunStaticRequestedGUID = &guid
 		device, err = tuntap.CreateTUN(ifname, int(cfg.MTU))
 		if err != nil {
-			log.Printf("Error creating TUN: '%s'", err)
+			log.Infof("Error creating TUN: '%s'", err)
 			wintun.Uninstall()
 			time.Sleep(3 * time.Second)
-			log.Printf("Trying again")
+			log.Infof("Trying again")
 			device, err = tuntap.CreateTUN(ifname, int(cfg.MTU))
 			if err != nil {
 				return err
 			}
 		}
-		log.Printf("Waiting for TUN to come up")
+		log.Infof("Waiting for TUN to come up")
 		time.Sleep(time.Second)
 		if cfg.Address != "" {
-			log.Printf("Setting up address")
+			log.Infof("Setting up address")
 			if err = configureAddress(log, device, cfg.Address); err != nil {
-				log.Errorln("Failed to set up TUN address:", err)
+				log.Err("Failed to set up TUN address:", err)
 				return err
 			}
 		}
 		if err = configureMTU(log, device, cfg.MTU); err != nil {
-			log.Errorln("Failed to set up TUN MTU:", err)
+			log.Err("Failed to set up TUN MTU:", err)
 			return err
 		}
-		log.Printf("TUN is set up successfully")
+		log.Infof("TUN is set up successfully")
 		return nil
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, add
 		for address := iface.FirstUnicastAddress; address != nil; address = address.Next {
 			if ip, _ := netip.AddrFromSlice(address.Address.IP()); addrHash[ip] {
 				prefix := netip.PrefixFrom(ip, int(address.OnLinkPrefixLength))
-				log.Printf("Cleaning up stale address %s from interface '%s'", prefix.String(), iface.FriendlyName())
+				log.Infof("Cleaning up stale address %s from interface '%s'", prefix.String(), iface.FriendlyName())
 				iface.LUID.DeleteIPAddress(prefix)
 			}
 		}

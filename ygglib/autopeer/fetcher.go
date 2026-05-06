@@ -560,6 +560,6 @@ func (f *Fetcher) fireCallback(peers []Peer, changed bool) {
 
 func (f *Fetcher) logf(format string, args ...any) {
 	if f.logger != nil {
-		f.logger.Printf(format, args...)
+		f.logger.Infof(format, args...)
 	}
 }

@@ -15,7 +15,7 @@ func create(log Logger, cfg Config) (gtun.Tun, error) {
 		return nil, fmt.Errorf("failed to create TUN: %w", err)
 	}
 	if cfg.Address != "" {
-		log.Warnln("Warning: Platform not supported, you must set the address of", mustName(device), "to", cfg.Address)
+		log.Warn("Warning: Platform not supported, you must set the address of", mustName(device), "to", cfg.Address)
 	}
 	return device, nil
 }

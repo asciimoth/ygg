@@ -53,7 +53,7 @@ func configureAddress(log Logger, device gtun.Tun, addr string, mtu uint64) erro
 	}
 	sfd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		log.Printf("Create AF_INET socket failed: %v.", err)
+		log.Infof("Create AF_INET socket failed: %v.", err)
 		return err
 	}
 	defer unix.Close(sfd)
@@ -76,13 +76,13 @@ func configureAddress(log Logger, device gtun.Tun, addr string, mtu uint64) erro
 
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(sfd), uintptr(siocsIFAddrIN6), uintptr(unsafe.Pointer(&ar))); errno != 0 {
 		err = errno
-		log.Errorf("Error in SIOCSIFADDR_IN6: %v", errno)
+		log.Errf("Error in SIOCSIFADDR_IN6: %v", errno)
 		cmd := exec.Command("ifconfig", name, "inet6", addr)
 		log.Warnf("Using ifconfig as fallback: %v", strings.Join(cmd.Args, " "))
 		output, cerr := cmd.CombinedOutput()
 		if cerr != nil {
-			log.Errorf("SIOCSIFADDR_IN6 fallback failed: %v.", cerr)
-			log.Warnln(string(output))
+			log.Errf("SIOCSIFADDR_IN6 fallback failed: %v.", cerr)
+			log.Warn(string(output))
 		}
 	}
 	return nil

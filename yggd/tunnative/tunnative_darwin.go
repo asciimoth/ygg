@@ -97,7 +97,7 @@ func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	}
 	fd, err := unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		log.Errorf("Create AF_SYSTEM socket failed: %v.", err)
+		log.Errf("Create AF_SYSTEM socket failed: %v.", err)
 		return fmt.Errorf("failed to open AF_SYSTEM: %w", err)
 	}
 	defer unix.Close(fd)
@@ -134,11 +134,11 @@ func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	log.Infof("Interface MTU: %d", ir.ifruMTU)
 
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(darwinSIOCAIFADDRIN6), uintptr(unsafe.Pointer(&ar))); errno != 0 {
-		log.Errorf("Error in darwin_SIOCAIFADDR_IN6: %v", errno)
+		log.Errf("Error in darwin_SIOCAIFADDR_IN6: %v", errno)
 		return fmt.Errorf("failed to call SIOCAIFADDR_IN6: %w", errno)
 	}
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSIFMTU), uintptr(unsafe.Pointer(&ir))); errno != 0 {
-		log.Errorf("Error in SIOCSIFMTU: %v", errno)
+		log.Errf("Error in SIOCSIFMTU: %v", errno)
 		return fmt.Errorf("failed to call SIOCSIFMTU: %w", errno)
 	}
 	return nil

@@ -186,9 +186,7 @@ func (c *Core) Subnet() net.IPNet {
 }
 
 // SetLogger sets the output logger of the Yggdrasil node after startup. This
-// may be useful if you want to redirect the output later. Note that this
-// expects a Logger from the github.com/gologme/log package and not from Go's
-// built-in log package.
+// may be useful if you want to redirect the output later.
 func (c *Core) SetLogger(log Logger) {
 	c.log = log
 }

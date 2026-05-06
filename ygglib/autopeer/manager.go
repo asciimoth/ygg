@@ -456,7 +456,7 @@ func (m *Manager) logf(format string, args ...interface{}) {
 	}
 	logger := m.logger()
 	if logger != nil {
-		logger.Printf(format, args...)
+		logger.Infof(format, args...)
 	}
 }
 

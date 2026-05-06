@@ -95,15 +95,15 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 		switch strings.ToLower(u.Scheme) {
 		case "unix":
 			if _, err := os.Stat(u.Path); err == nil {
-				a.log.Debugln("Admin socket", u.Path, "already exists, trying to clean up")
+				a.log.Debug("Admin socket", u.Path, "already exists, trying to clean up")
 				if _, err := net.DialTimeout("unix", u.Path, time.Second*2); err == nil || err.(net.Error).Timeout() {
-					a.log.Errorln("Admin socket", u.Path, "already exists and is in use by another process")
+					a.log.Err("Admin socket", u.Path, "already exists and is in use by another process")
 					return nil, fmt.Errorf("admin socket %q already exists and is in use", u.Path)
 				} else {
 					if err := os.Remove(u.Path); err == nil {
-						a.log.Debugln(u.Path, "was cleaned up")
+						a.log.Debug(u.Path, "was cleaned up")
 					} else {
-						a.log.Errorln(u.Path, "already exists and was not cleaned up:", err)
+						a.log.Err(u.Path, "already exists and was not cleaned up:", err)
 						return nil, fmt.Errorf("remove stale admin socket %q: %w", u.Path, err)
 					}
 				}
@@ -114,7 +114,7 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 				case "@": // maybe abstract namespace
 				default:
 					if err := os.Chmod(u.Path, 0660); err != nil {
-						a.log.Warnln("WARNING:", u.Path, "may have unsafe permissions!")
+						a.log.Warn("WARNING:", u.Path, "may have unsafe permissions!")
 					}
 				}
 			}
@@ -127,7 +127,7 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 		a.listener, err = net.Listen("tcp", listenaddr)
 	}
 	if err != nil {
-		a.log.Errorf("Admin socket failed to listen: %v", err)
+		a.log.Errf("Admin socket failed to listen: %v", err)
 		return nil, err
 	}
 	a.log.Infof("%s admin socket listening on %s",
@@ -428,7 +428,7 @@ func (a *AdminSocket) handleRequest(conn net.Conn) {
 			resp.Error = err.Error()
 		}
 		if err = encoder.Encode(resp); err != nil {
-			a.log.Debugln("Encode error:", err)
+			a.log.Debug("Encode error:", err)
 		}
 		if !req.KeepAlive {
 			break

@@ -1,14 +1,15 @@
 package autopeer
 
-import "github.com/asciimoth/gonnect"
+import (
+	"github.com/asciimoth/gonnect"
+	"github.com/asciimoth/ygg/ygglib/logger"
+)
 
 // BuiltinSource identifies the generated built-in public peers document.
 const BuiltinSource = "BUILTIN"
 
-// Logger is the minimal logging interface used by this package.
-type Logger interface {
-	Printf(string, ...interface{})
-}
+// Logger is the logging interface used by this package.
+type Logger = logger.Logger
 
 // Network aliases the gonnect network abstraction used for source fetching.
 type Network = gonnect.Network

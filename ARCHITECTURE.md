@@ -8,22 +8,23 @@ and CLI around them.
 At runtime, the system is composed as:
 
 1. `config` loads or generates node configuration and identity material.
-2. `transport` provides pluggable carrier transports and host-scoped
+2. `logger` defines the shared logging interface used by runtime packages.
+3. `transport` provides pluggable carrier transports and host-scoped
    `gonnect.Network` selection for connection setup.
-3. `autopeer` fetches public peer lists from one or more external sources and
+4. `autopeer` fetches public peer lists from one or more external sources and
    can maintain public peer counts at runtime by adding filtered candidates to
    `core` when configured thresholds are not met.
-4. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
-5. `admin` exposes a local control API over TCP or UNIX sockets.
+5. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
+6. `admin` exposes a local control API over TCP or UNIX sockets.
    The daemon wires admin adapters to `core`, `multicast`, and `tun` at
    startup time.
-6. `multicast` optionally discovers local peers and feeds them back into
+7. `multicast` optionally discovers local peers and feeds them back into
    `core` through a small runtime adapter.
-7. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
-8. `tun` supervises a runtime attachment for that IPv6 packet stream.
-9. `tunnative` provides OS-specific native TUN creation/configuration for the
+8. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
+9. `tun` supervises a runtime attachment for that IPv6 packet stream.
+10. `tunnative` provides OS-specific native TUN creation/configuration for the
    daemon.
-10. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
+11. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
     daemon.
 
 `yggd/yggd` is the composition root. It wires the packages together but
@@ -55,6 +56,30 @@ Key outputs consumed by other packages:
   daemon-owned TUN setup
 
 This package is intentionally passive. It does not start services.
+
+### `ygglib/logger`
+
+Purpose:
+- Define the process-wide logging contract used by library packages and the
+  daemon.
+- Provide a standard-library-backed implementation for embedders that do not
+  want to bring their own logger.
+
+Main types:
+- `logger.Logger`
+- `logger.StdLogger`
+
+Runtime use:
+- `core.Logger` and package-local logger aliases resolve to
+  `logger.Logger`, so callers pass one logging contract through `core`,
+  `admin`, `autopeer`, `multicast`, `tun`, `sockstun`, and `tunnative`.
+- `logger.StdLogger` wraps Go's `log` package, supports error/warn/info/debug
+  filtering, and is safe for concurrent use.
+- `logger.Discard()` provides the default no-op logger for library code when a
+  caller does not provide one.
+
+The logging package has no dependency on runtime packages. Runtime packages
+depend on the interface only and do not construct process log destinations.
 
 ### `ygglib/core`
 
@@ -430,7 +455,7 @@ and tests.
 The daemon is intentionally small. Its job is to:
 - parse flags
 - load config
-- build the logger
+- build the logger using `logger.StdLogger`
 - instantiate `core`
 - construct `admin`
 - register admin adapters for `core`
@@ -446,6 +471,10 @@ The daemon is intentionally small. Its job is to:
 
 The daemon does not reimplement protocol logic. It is mostly dependency
 injection and process lifecycle.
+
+`yggd/yggd` is also the default logging composition point. It chooses the log
+destination from `-logto` (`stdout`, `syslog`, or a file), applies `-loglevel`,
+and passes the resulting `logger.StdLogger` to the runtime packages.
 
 ### `yggd/yggctl`
 

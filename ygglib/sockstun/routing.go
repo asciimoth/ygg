@@ -12,6 +12,7 @@ import (
 	gonnecthelpers "github.com/asciimoth/gonnect/helpers"
 	"github.com/asciimoth/mnlib"
 	"github.com/asciimoth/socksgo"
+	"github.com/asciimoth/ygg/ygglib/logger"
 )
 
 var defaultNoResolveZones = []string{".onion", ".i2p", ".loki"}
@@ -26,13 +27,7 @@ type DNSConfig struct {
 	NoResolveZones []string `json:"no_resolve_zones,omitempty"`
 }
 
-type Logger interface {
-	Debugf(string, ...interface{})
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Debugf(string, ...interface{}) {}
+type Logger = logger.Logger
 
 type proxyRoute struct {
 	cfg     ProxyConfig
@@ -59,7 +54,7 @@ func newRouteNetwork(direct gonnect.Network, cfgs []ProxyConfig, defaultProxyURL
 		log = logs[0]
 	}
 	if log == nil {
-		log = discardLogger{}
+		log = logger.Discard()
 	}
 	n := &routeNetwork{direct: direct, log: log}
 	if err := n.SetProxies(cfgs, defaultProxyURL); err != nil {

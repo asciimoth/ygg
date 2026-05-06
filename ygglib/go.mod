@@ -9,7 +9,6 @@ require (
 	github.com/asciimoth/gonnect-netstack v0.3.15
 	github.com/asciimoth/mnlib v0.2.0
 	github.com/asciimoth/socksgo v0.2.10
-	github.com/gologme/log v1.3.0
 	github.com/hjson/hjson-go/v4 v4.6.0
 	github.com/wlynxg/anet v0.0.5
 	golang.org/x/crypto v0.48.0

@@ -23,10 +23,36 @@ type testLogger struct {
 }
 
 func (l *testLogger) Printf(format string, args ...interface{}) {
+	l.Infof(format, args...)
+}
+
+func (l *testLogger) Debug(...any) {}
+
+func (l *testLogger) Debugf(string, ...any) {}
+
+func (l *testLogger) Info(args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, fmt.Sprint(args...))
+}
+
+func (l *testLogger) Infof(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.lines = append(l.lines, fmt.Sprintf(format, args...))
 }
+
+func (l *testLogger) Warn(...any) {}
+
+func (l *testLogger) Warnf(string, ...any) {}
+
+func (l *testLogger) Err(...any) {}
+
+func (l *testLogger) Errf(string, ...any) {}
+
+func (l *testLogger) Fatal(...any) {}
+
+func (l *testLogger) Fatalf(string, ...any) {}
 
 func (l *testLogger) joined() string {
 	l.mu.Lock()

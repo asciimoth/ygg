@@ -27,7 +27,7 @@ func (tun *TunAdapter) queue() {
 			case <-tun.stopCh:
 				return
 			default:
-				tun.log.Errorln("Exiting TUN queue due to core read error:", err)
+				tun.log.Err("Exiting TUN queue due to core read error:", err)
 				return
 			}
 		}
@@ -69,7 +69,7 @@ func (s *attachmentSession) readLoop(tun *TunAdapter) {
 		n, err := s.device.Read(bufs, sizes, readOffset)
 		if err != nil {
 			if !s.stopping.Load() && !errors.Is(err, os.ErrClosed) && !errors.Is(err, io.EOF) {
-				tun.log.Errorln("Error reading TUN:", err)
+				tun.log.Err("Error reading TUN:", err)
 				tun.reportCh <- sessionReport{session: s, kind: sessionReportReadError}
 			}
 			return
@@ -79,7 +79,7 @@ func (s *attachmentSession) readLoop(tun *TunAdapter) {
 		}
 		for i, b := range bufs[:n] {
 			if _, err := tun.rwc.Write(b[readOffset : readOffset+sizes[i]]); err != nil {
-				tun.log.Debugln("Unable to send packet:", err)
+				tun.log.Debug("Unable to send packet:", err)
 			}
 		}
 	}
@@ -126,7 +126,7 @@ func (s *attachmentSession) writeLoop(tun *TunAdapter) {
 			written, err := s.device.Write(bufs, s.mwo)
 			if err != nil {
 				if !s.stopping.Load() && !errors.Is(err, os.ErrClosed) {
-					tun.log.Errorln("TUN iface write error:", err)
+					tun.log.Err("TUN iface write error:", err)
 					tun.reportCh <- sessionReport{session: s, kind: sessionReportWriteError}
 				}
 				return

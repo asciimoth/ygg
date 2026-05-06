@@ -11,20 +11,17 @@ import (
 
 	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/ygg/ygglib/config"
+	ygglogger "github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/transport"
-	"github.com/gologme/log"
 )
 
 // GetLoggerWithPrefix creates a new logger instance with prefix.
 // If verbose is set to true, three log levels are enabled: "info", "warn", "error".
-func GetLoggerWithPrefix(prefix string, verbose bool) *log.Logger {
-	l := log.New(os.Stderr, prefix, log.Flags())
-	if !verbose {
-		return l
+func GetLoggerWithPrefix(prefix string, verbose bool) *ygglogger.StdLogger {
+	l := ygglogger.New(os.Stderr, prefix, 0)
+	if verbose {
+		l.SetLevel(ygglogger.LevelInfo)
 	}
-	l.EnableLevel("info")
-	l.EnableLevel("warn")
-	l.EnableLevel("error")
 	return l
 }
 
@@ -63,7 +60,7 @@ func CreateAndConnectTwo(t testing.TB, verbose bool) (nodeA *Core, nodeB *Core) 
 	}
 
 	logger := GetLoggerWithPrefix("", false)
-	logger.EnableLevel("debug")
+	logger.SetLevel(ygglogger.LevelDebug)
 
 	if nodeA, err = New(cfgA.Certificate, logger, TransportManager{Manager: newCoreTransportManager(t, cfgA.Certificate)}); err != nil {
 		t.Fatal(err)

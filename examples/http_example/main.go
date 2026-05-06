@@ -22,11 +22,11 @@ import (
 	"github.com/asciimoth/gonnect-netstack/vtun"
 	"github.com/asciimoth/gonnect/loopback"
 	"github.com/asciimoth/gonnect/native"
-	gologme "github.com/gologme/log"
 
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/asciimoth/ygg/ygglib/ipv6rwc"
+	ygglogger "github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/transport"
 	yggtun "github.com/asciimoth/ygg/ygglib/tun"
 )
@@ -209,7 +209,7 @@ func newNode(name string, network transportExampleNetwork, ownsNetwork bool) (*n
 		return nil, err
 	}
 
-	yggLogger := gologme.New(io.Discard, "", 0)
+	yggLogger := ygglogger.Discard()
 	coreNode, err := core.New(
 		cfg.Certificate,
 		yggLogger,

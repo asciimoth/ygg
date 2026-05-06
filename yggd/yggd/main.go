@@ -8,6 +8,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	stdlog "log"
 	"net"
 	"net/url"
 	"os"
@@ -21,7 +23,6 @@ import (
 
 	"suah.dev/protect"
 
-	"github.com/gologme/log"
 	gsyslog "github.com/hashicorp/go-syslog"
 	"github.com/hjson/hjson-go/v4"
 	"github.com/kardianos/minwinsvc"
@@ -35,6 +36,7 @@ import (
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/asciimoth/ygg/ygglib/ipv6rwc"
+	"github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/multicast"
 	"github.com/asciimoth/ygg/ygglib/sockstun"
 	"github.com/asciimoth/ygg/ygglib/transport"
@@ -104,24 +106,30 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	// Create a new logger that logs output to stdout.
-	var logger *log.Logger
+	var logWriter io.Writer = os.Stdout
+	logFlags := stdlog.Flags()
+	logFallback := false
 	switch *logto {
 	case "stdout":
-		logger = log.New(os.Stdout, "", log.Flags())
 
 	case "syslog":
 		if syslogger, err := gsyslog.NewLogger(gsyslog.LOG_NOTICE, "DAEMON", version.BuildName()); err == nil {
-			logger = log.New(syslogger, "", log.Flags()&^(log.Ldate|log.Ltime))
+			logWriter = syslogger
+			logFlags = stdlog.Flags() & ^(stdlog.Ldate | stdlog.Ltime)
+		} else {
+			logFallback = true
 		}
 
 	default:
 		if logfd, err := os.OpenFile(*logto, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			logger = log.New(logfd, "", log.Flags())
+			logWriter = logfd
+		} else {
+			logFallback = true
 		}
 	}
-	if logger == nil {
-		logger = log.New(os.Stdout, "", log.Flags())
-		logger.Warnln("Logging defaulting to stdout")
+	logger := logger.New(logWriter, "", logFlags)
+	if logFallback {
+		logger.Warn("Logging defaulting to stdout")
 	}
 	if *normaliseconf {
 		setLogLevel("error", logger)
@@ -273,9 +281,9 @@ func main() {
 			panic(err)
 		}
 		address, subnet := n.core.Address(), n.core.Subnet()
-		logger.Printf("Your public key is %s", hex.EncodeToString(n.core.PublicKey()))
-		logger.Printf("Your IPv6 address is %s", address.String())
-		logger.Printf("Your IPv6 subnet is %s", subnet.String())
+		logger.Infof("Your public key is %s", hex.EncodeToString(n.core.PublicKey()))
+		logger.Infof("Your IPv6 address is %s", address.String())
+		logger.Infof("Your IPv6 subnet is %s", subnet.String())
 
 		fetchInterval, err := time.ParseDuration(cfg.AutoPeer.FetchInterval)
 		if err != nil {
@@ -814,30 +822,12 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func setLogLevel(loglevel string, logger *log.Logger) {
-	levels := [...]string{"error", "warn", "info", "debug", "trace"}
-	loglevel = strings.ToLower(loglevel)
-
-	contains := func() bool {
-		for _, l := range levels {
-			if l == loglevel {
-				return true
-			}
-		}
-		return false
+func setLogLevel(loglevel string, log *logger.StdLogger) {
+	level, ok := logger.ParseLevel(loglevel)
+	if !ok {
+		log.Info("Loglevel parse failed. Set default level(info)")
 	}
-
-	if !contains() { // set default log level
-		logger.Infoln("Loglevel parse failed. Set default level(info)")
-		loglevel = "info"
-	}
-
-	for _, l := range levels {
-		logger.EnableLevel(l)
-		if l == loglevel {
-			break
-		}
-	}
+	log.SetLevel(level)
 }
 
 func buildTunAddress(ip net.IP) string {

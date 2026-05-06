@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Arceliar/phony"
+	"github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/wlynxg/anet"
 
 	"golang.org/x/crypto/blake2b"
@@ -30,19 +31,7 @@ type Listener interface {
 	Stop()
 }
 
-type Logger interface {
-	Printf(string, ...interface{})
-	Println(...interface{})
-	Infof(string, ...interface{})
-	Infoln(...interface{})
-	Warnf(string, ...interface{})
-	Warnln(...interface{})
-	Errorf(string, ...interface{})
-	Errorln(...interface{})
-	Debugf(string, ...interface{})
-	Debugln(...interface{})
-	Traceln(...interface{})
-}
+type Logger = logger.Logger
 
 // Multicast represents the multicast advertisement and discovery mechanism used
 // by Yggdrasil to find peers on the same subnet. When a beacon is received on a
@@ -120,8 +109,8 @@ func (m *Multicast) _start() error {
 		m.running.Store(false)
 		return nil
 	}
-	m.log.Debugln("Starting multicast module")
-	defer m.log.Debugln("Started multicast module")
+	m.log.Debug("Starting multicast module")
+	defer m.log.Debug("Started multicast module")
 	addr, err := net.ResolveUDPAddr("udp", string(m.config._groupAddr))
 	if err != nil {
 		m.running.Store(false)
@@ -159,7 +148,7 @@ func (m *Multicast) Stop() error {
 	phony.Block(m, func() {
 		err = m._stop()
 	})
-	m.log.Debugln("Stopped multicast module")
+	m.log.Debug("Stopped multicast module")
 	return err
 }
 
@@ -167,7 +156,7 @@ func (m *Multicast) _stop() error {
 	if !m.running.CompareAndSwap(true, false) {
 		return nil
 	}
-	m.log.Infoln("Stopping multicast module")
+	m.log.Info("Stopping multicast module")
 	if m.sock != nil {
 		m.sock.Close()
 	}
@@ -293,7 +282,7 @@ func (m *Multicast) _announce() {
 		stop := func() {
 			info.listener.Stop()
 			delete(m._listeners, name)
-			m.log.Debugln("No longer multicasting on", name)
+			m.log.Debug("No longer multicasting on", name)
 		}
 		// If the interface is no longer visible on the system then stop the
 		// listener, as another one will be started further down
@@ -358,12 +347,12 @@ func (m *Multicast) _announce() {
 					RawQuery: v.Encode(),
 				}
 				if li, err := m.core.ListenLocal(u, iface.Name); err == nil {
-					m.log.Debugln("Started multicasting on", iface.Name)
+					m.log.Debug("Started multicasting on", iface.Name)
 					// Store the listener so that we can stop it later if needed
 					linfo = &listenerInfo{listener: li, time: time.Now(), port: info.port}
 					m._listeners[iface.Name] = linfo
 				} else {
-					m.log.Warnln("Not multicasting on", iface.Name, "due to error:", err)
+					m.log.Warn("Not multicasting on", iface.Name, "due to error:", err)
 				}
 			} else {
 				// An existing listener was found
@@ -390,7 +379,7 @@ func (m *Multicast) _announce() {
 			}
 			destAddr.Zone = iface.Name
 			if _, err = m.sock.WriteTo(msg, nil, destAddr); err != nil {
-				m.log.Warnln("Failed to send multicast beacon: " + err.Error())
+				m.log.Warn("Failed to send multicast beacon: " + err.Error())
 			}
 			if linfo.interval.Seconds() < 15 {
 				linfo.interval += time.Second
@@ -475,7 +464,7 @@ func (m *Multicast) listen() {
 				RawQuery: v.Encode(),
 			}
 			if err := m.core.CallPeer(u, from.Zone); err != nil {
-				m.log.Debugln("Call from multicast failed:", err)
+				m.log.Debug("Call from multicast failed:", err)
 			}
 		}
 	}

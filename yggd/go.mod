@@ -7,7 +7,6 @@ require (
 	github.com/asciimoth/mnlib v0.2.0
 	github.com/asciimoth/tuntap v0.3.1
 	github.com/asciimoth/ygg/ygglib v0.0.0
-	github.com/gologme/log v1.3.0
 	github.com/hashicorp/go-syslog v1.0.0
 	github.com/hjson/hjson-go/v4 v4.6.0
 	github.com/kardianos/minwinsvc v1.0.2

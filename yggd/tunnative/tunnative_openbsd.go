@@ -78,12 +78,12 @@ func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	}
 	ip, prefix, err := net.ParseCIDR(addr)
 	if err != nil {
-		log.Errorf("Error in ParseCIDR: %v", err)
+		log.Errf("Error in ParseCIDR: %v", err)
 		return err
 	}
 	sfd, err := unix.Socket(unix.AF_INET6, unix.SOCK_DGRAM, 0)
 	if err != nil {
-		log.Printf("Create AF_INET6 socket failed: %v", err)
+		log.Infof("Create AF_INET6 socket failed: %v", err)
 		return err
 	}
 	defer unix.Close(sfd)
@@ -101,7 +101,7 @@ func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	ar.ifraLifetime.ia6tPltime = nd6InfiniteLifetime
 
 	if err = unix.IoctlSetInt(sfd, siocAIFAddrIN6, int(uintptr(unsafe.Pointer(&ar)))); err != nil {
-		log.Errorf("Error in SIOCAIFADDR_IN6: %v", err)
+		log.Errf("Error in SIOCAIFADDR_IN6: %v", err)
 		return err
 	}
 	return nil

@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 
@@ -13,9 +12,9 @@ import (
 	iwn "github.com/Arceliar/ironwood/network"
 	iwt "github.com/Arceliar/ironwood/types"
 	"github.com/Arceliar/phony"
-	"github.com/gologme/log"
 
 	"github.com/asciimoth/ygg/ygglib/address"
+	ygglogger "github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/transport"
 	"github.com/asciimoth/ygg/ygglib/version"
 )
@@ -54,14 +53,14 @@ func New(cert *tls.Certificate, logger Logger, opts ...SetupOption) (*Core, erro
 	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	if c.log == nil {
-		c.log = log.New(io.Discard, "", 0)
+		c.log = ygglogger.Discard()
 	}
 
 	if name := version.BuildName(); name != "unknown" {
-		c.log.Infoln("Build name:", name)
+		c.log.Info("Build name:", name)
 	}
 	if version := version.BuildVersion(); version != "unknown" {
-		c.log.Infoln("Build version:", version)
+		c.log.Info("Build version:", version)
 	}
 
 	var err error
@@ -128,11 +127,11 @@ func New(cert *tls.Certificate, logger Logger, opts ...SetupOption) (*Core, erro
 	for listenaddr := range c.config._listeners {
 		u, err := url.Parse(string(listenaddr))
 		if err != nil {
-			c.log.Errorf("Invalid listener URI %q specified, ignoring\n", listenaddr)
+			c.log.Errf("Invalid listener URI %q specified, ignoring\n", listenaddr)
 			continue
 		}
 		if _, err = c.links.listen(u, "", false); err != nil {
-			c.log.Errorf("Failed to start listener %q: %s\n", listenaddr, err)
+			c.log.Errf("Failed to start listener %q: %s\n", listenaddr, err)
 		}
 	}
 	return c, nil
@@ -152,9 +151,9 @@ func (c *Core) RetryPeersNow() {
 // Stop shuts down the Yggdrasil node.
 func (c *Core) Stop() {
 	phony.Block(c, func() {
-		c.log.Infoln("Stopping...")
+		c.log.Info("Stopping...")
 		_ = c._close()
-		c.log.Infoln("Stopped")
+		c.log.Info("Stopped")
 	})
 }
 
@@ -236,16 +235,4 @@ func (c *Core) SetPathNotify(notify func(ed25519.PublicKey)) {
 	})
 }
 
-type Logger interface {
-	Printf(string, ...interface{})
-	Println(...interface{})
-	Infof(string, ...interface{})
-	Infoln(...interface{})
-	Warnf(string, ...interface{})
-	Warnln(...interface{})
-	Errorf(string, ...interface{})
-	Errorln(...interface{})
-	Debugf(string, ...interface{})
-	Debugln(...interface{})
-	Traceln(...interface{})
-}
+type Logger = ygglogger.Logger

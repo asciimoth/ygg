@@ -14,17 +14,16 @@ import (
 
 type testLogger struct{}
 
-func (testLogger) Printf(string, ...interface{}) {}
-func (testLogger) Println(...interface{})        {}
-func (testLogger) Infof(string, ...interface{})  {}
-func (testLogger) Infoln(...interface{})         {}
-func (testLogger) Warnf(string, ...interface{})  {}
-func (testLogger) Warnln(...interface{})         {}
-func (testLogger) Errorf(string, ...interface{}) {}
-func (testLogger) Errorln(...interface{})        {}
-func (testLogger) Debugf(string, ...interface{}) {}
-func (testLogger) Debugln(...interface{})        {}
-func (testLogger) Traceln(...interface{})        {}
+func (testLogger) Debug(...any)          {}
+func (testLogger) Debugf(string, ...any) {}
+func (testLogger) Info(...any)           {}
+func (testLogger) Infof(string, ...any)  {}
+func (testLogger) Warn(...any)           {}
+func (testLogger) Warnf(string, ...any)  {}
+func (testLogger) Err(...any)            {}
+func (testLogger) Errf(string, ...any)   {}
+func (testLogger) Fatal(...any)          {}
+func (testLogger) Fatalf(string, ...any) {}
 
 type fakeRWC struct {
 	readCh chan []byte
