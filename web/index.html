@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Yggdrasil Web VTun Demo</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main>
+      <section class="topbar">
+        <div>
+          <h1>Yggdrasil Web VTun Demo</h1>
+          <p>Browser WASM node using WebSocket peers, autopeer, Core, and VTun.</p>
+        </div>
+        <div id="runtimeStatus" class="status loading">Loading WASM</div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Node</h2>
+          <label>
+            Autopeer countries
+            <input id="countries" value="finland,germany,hungary,netherlands,russia,united-states">
+          </label>
+          <label>
+            Autopeer schemes
+            <input id="schemes" value="wss">
+          </label>
+          <label>
+            WebSocket relay
+            <input id="relayUrl" value="/ygg-peer">
+          </label>
+          <label>
+            Manual peer URLs
+            <textarea id="manualPeers" placeholder="wss://host:port"></textarea>
+          </label>
+          <div class="actions">
+            <button id="startNode">Start Node</button>
+            <button id="stopNode" disabled>Stop Node</button>
+            <button id="refreshState" disabled>Refresh</button>
+          </div>
+          <dl class="facts">
+            <dt>Address</dt>
+            <dd id="address">-</dd>
+            <dt>Subnet</dt>
+            <dd id="subnet">-</dd>
+          </dl>
+        </div>
+
+        <div class="panel">
+          <h2>HTTP over VTun</h2>
+          <label>
+            Method
+            <select id="method">
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+              <option>HEAD</option>
+            </select>
+          </label>
+          <label>
+            URL
+            <input id="requestUrl" placeholder="http://[200:...]:8000/">
+          </label>
+          <label>
+            Headers
+            <textarea id="headers" placeholder="Accept: text/plain"></textarea>
+          </label>
+          <label>
+            Body
+            <textarea id="body"></textarea>
+          </label>
+          <button id="runRequest" disabled>Run Request</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Peers</h2>
+        <table>
+          <thead>
+            <tr><th>URI</th><th>State</th><th>Direction</th><th>Last error</th></tr>
+          </thead>
+          <tbody id="peers">
+            <tr><td colspan="4">No peers yet.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>Response</h2>
+        <pre id="response"></pre>
+      </section>
+
+      <section class="panel">
+        <h2>Logs</h2>
+        <div id="logs" class="logs"></div>
+      </section>
+    </main>
+    <script src="wasm_exec.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

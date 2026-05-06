@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/ygg/ygglib/config"
@@ -119,6 +122,89 @@ func TestSecureWebSocketListenUnsupported(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected wss listen to be unsupported")
+	}
+}
+
+func TestWebSocketListenOriginWildcard(t *testing.T) {
+	tests := []struct {
+		name    string
+		rawURL  string
+		wantErr bool
+	}{
+		{
+			name:    "cross origin rejected by default",
+			rawURL:  "ws://127.0.0.1:0",
+			wantErr: true,
+		},
+		{
+			name:   "origin wildcard accepts cross origin",
+			rawURL: "ws://127.0.0.1:0?origin=*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			network := &native.Network{}
+			if err := network.Up(); err != nil {
+				t.Fatal(err)
+			}
+
+			listenURL, err := url.Parse(tt.rawURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			listener, err := NewWebSocketTransport().Listen(ctx, network, listenURL, transport.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = listener.Close() })
+
+			if !tt.wantErr {
+				errCh := make(chan error, 1)
+				go func() {
+					conn, err := listener.Accept()
+					if err != nil {
+						errCh <- err
+						return
+					}
+					errCh <- conn.Close()
+				}()
+				t.Cleanup(func() {
+					select {
+					case err := <-errCh:
+						if err != nil {
+							t.Error(err)
+						}
+					case <-time.After(time.Second):
+						t.Error("timed out waiting for websocket accept")
+					}
+				})
+			}
+
+			headers := http.Header{}
+			headers.Set("Origin", "http://127.0.0.1:8000")
+			c, _, err := websocket.Dial(ctx, "ws://"+listener.Addr().String(), &websocket.DialOptions{
+				HTTPHeader:   headers,
+				Subprotocols: []string{websocketSubprotocol},
+			})
+			if tt.wantErr {
+				if err == nil {
+					_ = c.Close(websocket.StatusNormalClosure, "")
+					t.Fatal("expected cross-origin websocket dial to fail")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.Subprotocol() != websocketSubprotocol {
+				t.Fatalf("unexpected subprotocol %q", c.Subprotocol())
+			}
+			_ = c.Close(websocket.StatusNormalClosure, "")
+		})
 	}
 }
 

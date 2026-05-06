@@ -24,3 +24,7 @@ The examples are covered by tests. Run them with:
 ```sh
 go test ./examples/... --race
 ```
+
+The browser counterpart lives in `../web`. It uses the same Core + VTun pattern
+as `http_example`, but replaces the native/loopback carrier network with
+browser WebSocket dialing and exposes the HTTP client path in a web UI.

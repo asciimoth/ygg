@@ -31,9 +31,15 @@ At runtime, the system is composed as:
     daemon.
 13. `outproxy` provides a VTun-backed Yggdrasil-hosted SOCKS outproxy
     implementation for the daemon.
+14. `web` provides a browser WASM demo that embeds `core`, attaches VTun, dials
+    public peers over WebSocket transports, and exposes an HTTP-over-VTun UI.
 
 `yggd/yggd` is the composition root. It wires the packages together but
 keeps most behavior inside `ygglib/`.
+
+`web` is a separate demo composition root. It intentionally does not use native
+networking because the browser target does not expose native sockets to Go
+WASM.
 
 ## Top-Level Components
 
@@ -568,6 +574,40 @@ It:
 
 Standalone helper for generating Ed25519 keys with favorable address ordering.
 It is operationally separate from the running node.
+
+### `web`
+
+The browser demo under `web/` is a small WASM application rather than a daemon.
+
+It:
+- generates an ephemeral node certificate in the browser
+- constructs a `transport.Manager` with `gonnect/reject.Network` as the default
+  carrier network
+- registers browser `ws` and `wss` transports implemented with
+  `github.com/coder/websocket`
+- creates `core.Core` with the injected transport manager
+- adapts `core` packets through `ipv6rwc`
+- attaches a `github.com/asciimoth/gonnect-netstack/vtun.VTun` through
+  `tun.TunAdapter`
+- starts `autopeer.Manager` against the built-in public peer list, filtered by
+  UI-selected countries and WebSocket schemes
+- accepts optional manual `ws://` or `wss://` peer URLs from the UI
+- runs browser-initiated HTTP requests through the VTun dialer
+- includes `web/server`, a local static-file server with a same-origin
+  WebSocket relay at `/ygg-peer`
+
+On `GOOS=js GOARCH=wasm`, `github.com/coder/websocket.Dial` uses the host
+JavaScript WebSocket API. The web transport therefore ignores the
+`gonnect/reject.Network` carrier passed by `transport.Manager`; the reject
+network exists only to satisfy the manager contract and to make accidental
+native carrier use fail closed.
+
+When configured with the default `/ygg-peer` relay, browser WebSocket dials are
+rewritten to the local same-origin relay with the original peer URL in the
+`target` query parameter. The relay then dials the public peer from Go and
+copies bytes in both directions. This avoids browser-only restrictions such as
+mandatory `Origin` headers on cross-site WebSocket handshakes while preserving
+the Core-facing peer URI.
 
 ## Main Runtime Interfaces
 

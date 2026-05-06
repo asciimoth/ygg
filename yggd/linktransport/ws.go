@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -116,8 +117,9 @@ func (l *websocketListener) Close() error {
 }
 
 type websocketServer struct {
-	ch  chan net.Conn
-	ctx context.Context
+	ch            chan net.Conn
+	ctx           context.Context
+	acceptOptions websocket.AcceptOptions
 }
 
 func (s *websocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -127,9 +129,7 @@ func (s *websocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		Subprotocols: []string{websocketSubprotocol},
-	})
+	c, err := websocket.Accept(w, r, &s.acceptOptions)
 	if err != nil {
 		return
 	}
@@ -185,8 +185,9 @@ func websocketListen(
 	ch := make(chan net.Conn)
 	httpServer := &http.Server{
 		Handler: &websocketServer{
-			ch:  ch,
-			ctx: ctx,
+			ch:            ch,
+			ctx:           ctx,
+			acceptOptions: websocketAcceptOptions(u),
 		},
 		BaseContext:  func(net.Listener) context.Context { return ctx },
 		ReadTimeout:  10 * time.Second,
@@ -204,6 +205,25 @@ func websocketListen(
 		close(ch)
 	}()
 	return l, nil
+}
+
+func websocketAcceptOptions(u *url.URL) websocket.AcceptOptions {
+	opts := websocket.AcceptOptions{
+		Subprotocols: []string{websocketSubprotocol},
+	}
+	for _, origin := range u.Query()["origin"] {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			opts.InsecureSkipVerify = true
+			opts.OriginPatterns = nil
+			break
+		}
+		opts.OriginPatterns = append(opts.OriginPatterns, origin)
+	}
+	return opts
 }
 
 var _ transport.Transport = (*WebSocketTransport)(nil)

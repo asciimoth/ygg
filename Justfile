@@ -1,19 +1,34 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 test:
-	go test ./ygglib/... ./yggd/... ./examples/... --race -count=1
+	go test ./ygglib/... ./yggd/... ./examples/... ./web/... --race -count=1
 
 coverage:
 	go test ./ygglib/... ./yggd/... ./examples/... -coverprofile=coverage.out -coverpkg=./...
 
 vet:
-	go vet ./ygglib/... ./yggd/... ./examples/...
+	go vet ./ygglib/... ./yggd/... ./examples/... ./web/...
 
 tidy:
 	go -C ygglib mod tidy
 	go -C yggd mod tidy
 	go -C examples mod tidy
+	go -C web mod tidy
 	go work sync
+
+web-build:
+	GOOS=js GOARCH=wasm go -C web build -o app.wasm .
+	@if [ -f "$(go env GOROOT)/misc/wasm/wasm_exec.js" ]; then \
+		cp -f "$(go env GOROOT)/misc/wasm/wasm_exec.js" web/wasm_exec.js; \
+	elif [ -f "$(go env GOROOT)/lib/wasm/wasm_exec.js" ]; then \
+		cp -f "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/wasm_exec.js; \
+	else \
+		echo "wasm_exec.js not found in GOROOT" >&2; \
+		exit 1; \
+	fi
+
+web-serve: web-build
+	go run ./web/server -dir web
 
 # Run a temporary daemon with sockstun and global built-in autopeering enabled.
 # Override with SOCKS_LISTEN=127.0.0.1:1081 ADMIN_LISTEN=tcp://localhost:9002 ADMIN_WEB_LISTEN=127.0.0.1:9003 LOGLEVEL=debug.
