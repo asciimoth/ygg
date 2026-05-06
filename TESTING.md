@@ -8,6 +8,7 @@ This repository has several main test layers:
 - A Linux Docker jumper suite that validates NodeInfo-based direct peering over an indirect route
 - A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
 - A Linux Docker sockstun suite that validates VTun-backed local SOCKS proxying and runtime TUN swaps
+- A Linux Docker topology suite that validates multi-hop local daemon graphs and runtime failover
 
 ## Standard Checks
 
@@ -91,6 +92,74 @@ Each run captures:
 - `yggdrasilctl -json getTun`
 
 Containers, Docker network, and temporary Docker images are removed during cleanup.
+
+## Docker Topology Suite
+
+Run the Docker topology suite with:
+
+```bash
+just test-topology
+```
+
+This target also uses `sudo` because it needs Docker access and privileged containers.
+
+### What It Tests
+
+The Docker topology suite validates that:
+
+- Six daemons built from this repository can form a non-trivial local graph:
+  `node1 -> node3 <- node2`, `node3 -> node4`, and
+  `node4 -> node5`, `node4 -> node6`
+- Every graph edge runs on its own Docker bridge network, so direct container
+  connectivity matches the intended physical topology
+- End-to-end IPv6 reachability works between every node pair over Yggdrasil TUN interfaces
+- Learned path state appears in `getPaths` after traffic crosses the graph
+- Removing the central `node3 -> node4` peer partitions the overlay
+- Adding the pre-wired backup `node2 -> node5` peer at runtime restores reachability
+
+The graph shape is adapted from [misc/run-schannel-netns](/home/moth/projects/ygg/misc/run-schannel-netns), but runs in Docker containers instead of host network namespaces.
+
+### How It Works
+
+The runner is [tests/topology/run.sh](/home/moth/projects/ygg/tests/topology/run.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates six fresh JSON configs with admin enabled, one TLS listener, no static peers, multicast disabled, and autopeering disabled.
+3. Creates one Docker bridge network per topology edge and connects only the two endpoint containers to each edge network.
+4. Starts six privileged containers running `yggd`.
+5. Adds the primary graph peerings through the real admin socket using `yggdrasilctl addPeer`.
+6. Waits for expected direct peer counts on every node.
+7. Verifies all-pairs `ping -6` reachability over Yggdrasil addresses.
+8. Removes the central bridge peering with `yggdrasilctl removePeer` and verifies cross-partition pings fail.
+9. Adds a backup peering with `yggdrasilctl addPeer` and verifies cross-partition pings recover.
+
+### Prerequisites
+
+The Docker topology suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+
+### Artifacts
+
+Temporary logs and interface snapshots are written under:
+
+```text
+.tmp/topology/
+```
+
+Each run captures:
+
+- Container logs
+- `ip addr` and `ip route` snapshots
+- `yggdrasilctl -json getSelf`
+- `yggdrasilctl -json getPeers`
+- `yggdrasilctl -json getTree`
+- `yggdrasilctl -json getPaths`
+- `yggdrasilctl -json getTun`
 
 ## Docker Jumper Suite
 

@@ -61,4 +61,8 @@ test-transport:
 test-sockstun:
 	sudo ./tests/compat/run-sockstun.sh
 
-test-total: test test-compat test-autopeer test-jumper test-transport test-sockstun
+# Docker-based multi-node local topology e2e test. Uses sudo.
+test-topology:
+	sudo ./tests/topology/run.sh
+
+test-total: test test-compat test-autopeer test-jumper test-transport test-sockstun test-topology
