@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,6 +98,66 @@ func TestAdminSocketConcurrentHandlerAccess(t *testing.T) {
 		t.Fatalf("request loop failed: %v", err)
 	}
 	<-serverDone
+}
+
+func TestSetupConfigHandlersExposesAllNodeConfigOptions(t *testing.T) {
+	cfg := config.GenerateConfig()
+	cfg.LocalDNSListen = ""
+	cfg.TunSocksNoResolve = nil
+
+	a := &AdminSocket{
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	a.SetupConfigHandlers(NewConfigController(cfg))
+
+	h, ok := a.handlers["getconfig"]
+	if !ok {
+		t.Fatal("expected getConfig handler to be registered")
+	}
+	res, err := h.handler(nil)
+	if err != nil {
+		t.Fatalf("getConfig handler returned error: %v", err)
+	}
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal getConfig response: %v", err)
+	}
+	var resp GetConfigResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal getConfig response: %v", err)
+	}
+
+	cfgType := reflect.TypeOf(config.NodeConfig{})
+	for i := 0; i < cfgType.NumField(); i++ {
+		field := cfgType.Field(i)
+		name := testJSONFieldName(field)
+		if name == "-" {
+			if _, ok := resp.Config[field.Name]; ok {
+				t.Fatalf("field %s must not be exposed", field.Name)
+			}
+			continue
+		}
+		if _, ok := resp.Config[name]; !ok {
+			t.Fatalf("missing config option %s", name)
+		}
+	}
+	if _, ok := resp.Config["LocalDNSListen"]; !ok {
+		t.Fatal("expected empty LocalDNSListen option to be present")
+	}
+	if _, ok := resp.Config["TunSocksNoResolve"]; !ok {
+		t.Fatal("expected nil TunSocksNoResolve option to be present")
+	}
+}
+
+func testJSONFieldName(field reflect.StructField) string {
+	tag := field.Tag.Get("json")
+	name, _, _ := strings.Cut(tag, ",")
+	if name == "" {
+		return field.Name
+	}
+	return name
 }
 
 func TestSetupAutoPeerHandlers(t *testing.T) {

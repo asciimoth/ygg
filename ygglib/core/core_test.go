@@ -121,18 +121,30 @@ func newCoreTransportManager(t testing.TB, cert *tls.Certificate) *transport.Man
 
 // WaitConnected blocks until either nodes negotiated DHT or 5 seconds passed.
 func WaitConnected(nodeA, nodeB *Core) bool {
-	// It may take up to 3 seconds, but let's wait 5.
-	for i := 0; i < 50; i++ {
-		time.Sleep(100 * time.Millisecond)
+	const (
+		interval       = 100 * time.Millisecond
+		maxAttempts    = 50
+		stableAttempts = 3
+		settleInterval = 2 * time.Second
+	)
+
+	stable := 0
+	for i := 0; i < maxAttempts; i++ {
+		time.Sleep(interval)
 		/*
 			if len(nodeA.GetPeers()) > 0 && len(nodeB.GetPeers()) > 0 {
 				return true
 			}
 		*/
 		if len(nodeA.GetTree()) > 1 && len(nodeB.GetTree()) > 1 {
-			time.Sleep(3 * time.Second) // FIXME hack, there's still stuff happening internally
-			return true
+			stable++
+			if stable >= stableAttempts {
+				time.Sleep(settleInterval)
+				return true
+			}
+			continue
 		}
+		stable = 0
 	}
 	return false
 }

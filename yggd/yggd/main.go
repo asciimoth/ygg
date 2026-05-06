@@ -358,6 +358,7 @@ func main() {
 			}
 		}
 		if n.admin != nil {
+			n.admin.SetupConfigHandlers(admin.NewConfigController(cfg))
 			n.admin.SetupCoreHandlers()
 			n.admin.SetupAutoPeerHandlers(admin.NewAutoPeerController(n.autopeer, cfg.AutoPeer.Enabled))
 			n.admin.SetupJumperHandlers(admin.NewJumperController(
