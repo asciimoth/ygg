@@ -26,6 +26,7 @@ import (
 	"github.com/hjson/hjson-go/v4"
 	"github.com/kardianos/minwinsvc"
 
+	"github.com/asciimoth/gonnect"
 	gtun "github.com/asciimoth/gonnect/tun"
 	"github.com/asciimoth/ygg/yggd/tunnative"
 	"github.com/asciimoth/ygg/ygglib/address"
@@ -77,6 +78,8 @@ func (a multicastCoreAdapter) PublicKey() ed25519.PublicKey {
 
 // The main function is responsible for configuring and starting Yggdrasil.
 func main() {
+	gonnect.UnfuckGoDns()
+
 	genconf := flag.Bool("genconf", false, "print a new config to stdout")
 	useconf := flag.Bool("useconf", false, "read HJSON/JSON config from stdin")
 	useconffile := flag.String("useconffile", "", "read HJSON/JSON config from specified file path")
