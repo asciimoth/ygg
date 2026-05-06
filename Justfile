@@ -18,13 +18,19 @@ run-sockstun-autopeer:
 	@tmpdir="$(mktemp -d)"; \
 	trap 'rm -rf "${tmpdir}"' EXIT; \
 	cfg="${tmpdir}/ygg.json"; \
+	ca_crt="${tmpdir}/mitm-ca.crt"; \
+	ca_key="${tmpdir}/mitm-ca.key"; \
+	openssl genrsa -out "${ca_key}" 2048; \
+	openssl req -x509 -new -nodes -key "${ca_key}" -sha256 -days 1 -out "${ca_crt}" -subj "/CN=ygg sockstun MITM temporary CA"; \
 	countries="$(jq -r '[.peers[].country] | unique | join(",")' ygglib/autopeer/builtin_peers_generated.json)"; \
 	go run ./yggd/yggd -genconf -json \
-		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" '.AdminListen = $admin | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .TunSocksDNSFallback = "[300:6223::53]:53" | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
+		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" --arg ca_crt "${ca_crt}" --arg ca_key "${ca_key}" '.AdminListen = $admin | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .TunSocksDNSFallback = "[300:6223::53]:53" | .TunSocksTLSMITM = { ca_file: $ca_crt, key_file: $ca_key } | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
 		>"${cfg}"; \
 	echo "Admin: ${ADMIN_LISTEN:-tcp://localhost:9001}"; \
 	echo "SOCKS: ${SOCKS_LISTEN:-127.0.0.1:1080}"; \
+	echo "MITM CA: ${ca_crt}"; \
 	echo "Curl:  curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} http://myip.ygg"; \
+	echo "HTTPS: curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} --cacert ${ca_crt} https://myip.ygg"; \
 	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
 
 # Docker-based compatibility tests against pinned upstream yggdrasil-go. Uses sudo.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/socksgo"
+	"github.com/asciimoth/socksgo/protocol"
 )
 
 func TestCreateStartsLocalSocksListener(t *testing.T) {
@@ -158,6 +159,50 @@ func TestTLSMITMHostnameMatcher(t *testing.T) {
 		if got := matchHostnamePattern(tt.host, tt.pattern); got != tt.want {
 			t.Fatalf("matchHostnamePattern(%q, %q) = %v, want %v", tt.host, tt.pattern, got, tt.want)
 		}
+	}
+}
+
+func TestTLSMITMShouldInterceptConfiguredHostnames(t *testing.T) {
+	mitm := &tlsMITM{hosts: []string{"secure.example", "*.alt"}}
+	tests := []struct {
+		address string
+		network string
+		want    bool
+	}{
+		{address: "secure.example:443", network: "tcp", want: true},
+		{address: "api.alt:443", network: "tcp", want: true},
+		{address: "myip.ygg:443", network: "tcp", want: false},
+		{address: "secure.example:80", network: "tcp", want: false},
+		{address: "[200::1234]:443", network: "tcp", want: false},
+	}
+	for _, tt := range tests {
+		addr := protocol.AddrFromHostPort(tt.address, tt.network)
+		if got := mitm.shouldIntercept(addr); got != tt.want {
+			t.Fatalf("shouldIntercept(%q, %q) = %v, want %v", tt.network, tt.address, got, tt.want)
+		}
+	}
+}
+
+func TestTLSMITMPlaintextDialUsesRouteResolver(t *testing.T) {
+	direct := &recordNetwork{}
+	network, err := newRouteNetwork(direct, nil, "", DNSConfig{})
+	if err != nil {
+		t.Fatalf("newRouteNetwork: %v", err)
+	}
+	network.mu.Lock()
+	network.resolver = fakeResolver{ips: []net.IP{net.ParseIP("200::1234")}}
+	network.mu.Unlock()
+
+	mitm := &tlsMITM{network: network}
+	_, target, err := mitm.dialPlaintext(context.Background(), "tcp", "secure.example")
+	if err != nil {
+		t.Fatalf("dialPlaintext: %v", err)
+	}
+	if target != "secure.example:80" {
+		t.Fatalf("target = %q, want original hostname target", target)
+	}
+	if direct.lastAddress != "[200::1234]:80" {
+		t.Fatalf("upstream dial = %q, want resolved Yggdrasil address", direct.lastAddress)
 	}
 }
 

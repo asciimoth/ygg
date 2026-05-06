@@ -125,8 +125,7 @@ func (m *tlsMITM) handle(ctx context.Context, server *socksgo.Server, conn net.C
 		return err
 	}
 	host := normalizeHost(addr.ToFQDN())
-	target := net.JoinHostPort(host, "80")
-	conn2, err := m.network.dialUnresolved(ctx, addr.Network(), target)
+	conn2, target, err := m.dialPlaintext(ctx, addr.Network(), host)
 	if err != nil {
 		protocol.Reject(ver, conn, protocol.HostUnreachReply, pool)
 		return err
@@ -151,6 +150,12 @@ func (m *tlsMITM) handle(ctx context.Context, server *socksgo.Server, conn net.C
 		m.log.Debugf("sockstun TLS MITM intercepted host=%q upstream=%q", host, target)
 	}
 	return gonnecthelpers.PipeConn(tlsConn, conn2)
+}
+
+func (m *tlsMITM) dialPlaintext(ctx context.Context, network, host string) (net.Conn, string, error) {
+	target := net.JoinHostPort(host, "80")
+	conn, err := m.network.Dial(ctx, network, target)
+	return conn, target, err
 }
 
 func (m *tlsMITM) leafCert(host string) (*tls.Certificate, error) {
