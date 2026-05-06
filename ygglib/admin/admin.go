@@ -21,11 +21,14 @@ type AdminSocket struct {
 	core       *core.Core
 	log        core.Logger
 	listener   net.Listener
+	web        *webAdminServer
 	handlersMu sync.RWMutex
 	handlers   map[string]handler
 	done       chan struct{}
 	config     struct {
-		listenaddr ListenAddress
+		listenaddr    ListenAddress
+		webListenaddr WebListenAddress
+		webStaticDir  WebStaticDir
 	}
 }
 
@@ -86,9 +89,42 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 		a._applyOption(opt)
 	}
 	if a.config.listenaddr == "none" || a.config.listenaddr == "" {
-		return nil, nil
+		if a.config.webListenaddr == "" || a.config.webListenaddr == "none" {
+			return nil, nil
+		}
+		a.done = make(chan struct{})
+	} else {
+		if err := a.startSocket(); err != nil {
+			return nil, err
+		}
 	}
 
+	_ = a.AddHandler("list", "List available commands", []string{}, func(_ json.RawMessage) (interface{}, error) {
+		res := &ListResponse{}
+		a.handlersMu.RLock()
+		for name, handler := range a.handlers {
+			res.List = append(res.List, ListEntry{
+				Command:     name,
+				Description: handler.desc,
+				Fields:      handler.args,
+			})
+		}
+		a.handlersMu.RUnlock()
+		sort.SliceStable(res.List, func(i, j int) bool {
+			return strings.Compare(res.List[i].Command, res.List[j].Command) < 0
+		})
+		return res, nil
+	})
+	if a.config.webListenaddr != "" && a.config.webListenaddr != "none" {
+		if err := a.startWebAdmin(); err != nil {
+			_ = a.Stop()
+			return nil, err
+		}
+	}
+	return a, nil
+}
+
+func (a *AdminSocket) startSocket() error {
 	listenaddr := string(a.config.listenaddr)
 	u, err := url.Parse(listenaddr)
 	if err == nil {
@@ -98,13 +134,13 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 				a.log.Debug("Admin socket", u.Path, "already exists, trying to clean up")
 				if _, err := net.DialTimeout("unix", u.Path, time.Second*2); err == nil || err.(net.Error).Timeout() {
 					a.log.Err("Admin socket", u.Path, "already exists and is in use by another process")
-					return nil, fmt.Errorf("admin socket %q already exists and is in use", u.Path)
+					return fmt.Errorf("admin socket %q already exists and is in use", u.Path)
 				} else {
 					if err := os.Remove(u.Path); err == nil {
 						a.log.Debug(u.Path, "was cleaned up")
 					} else {
 						a.log.Err(u.Path, "already exists and was not cleaned up:", err)
-						return nil, fmt.Errorf("remove stale admin socket %q: %w", u.Path, err)
+						return fmt.Errorf("remove stale admin socket %q: %w", u.Path, err)
 					}
 				}
 			}
@@ -128,31 +164,15 @@ func New(c *core.Core, log core.Logger, opts ...SetupOption) (*AdminSocket, erro
 	}
 	if err != nil {
 		a.log.Errf("Admin socket failed to listen: %v", err)
-		return nil, err
+		return err
 	}
 	a.log.Infof("%s admin socket listening on %s",
 		strings.ToUpper(a.listener.Addr().Network()),
 		a.listener.Addr().String())
 
-	_ = a.AddHandler("list", "List available commands", []string{}, func(_ json.RawMessage) (interface{}, error) {
-		res := &ListResponse{}
-		a.handlersMu.RLock()
-		for name, handler := range a.handlers {
-			res.List = append(res.List, ListEntry{
-				Command:     name,
-				Description: handler.desc,
-				Fields:      handler.args,
-			})
-		}
-		a.handlersMu.RUnlock()
-		sort.SliceStable(res.List, func(i, j int) bool {
-			return strings.Compare(res.List[i].Command, res.List[j].Command) < 0
-		})
-		return res, nil
-	})
 	a.done = make(chan struct{})
 	go a.listen()
-	return a, nil
+	return nil
 }
 
 func (a *AdminSocket) SetupCoreHandlers() {
@@ -356,9 +376,14 @@ func (a *AdminSocket) Stop() error {
 		default:
 			close(a.done)
 		}
-		return a.listener.Close()
+		return errors.Join(a.listener.Close(), a.stopWebAdmin())
 	}
-	return nil
+	select {
+	case <-a.done:
+	default:
+		close(a.done)
+	}
+	return a.stopWebAdmin()
 }
 
 // listen is run by start and manages API connections.
@@ -394,36 +419,20 @@ func (a *AdminSocket) handleRequest(conn net.Conn) {
 		var err error
 		var buf json.RawMessage
 		var req AdminSocketRequest
-		var resp AdminSocketResponse
 		req.Arguments = []byte("{}")
-		if err := func() error {
+		if err = func() error {
 			if err = decoder.Decode(&buf); err != nil {
 				return fmt.Errorf("failed to find request")
 			}
 			if err = json.Unmarshal(buf, &req); err != nil {
 				return fmt.Errorf("failed to unmarshal request")
 			}
-			resp.Request = req
-			if req.Name == "" {
-				return fmt.Errorf("no request specified")
-			}
-			reqname := strings.ToLower(req.Name)
-			a.handlersMu.RLock()
-			handler, ok := a.handlers[reqname]
-			a.handlersMu.RUnlock()
-			if !ok {
-				return fmt.Errorf("unknown action '%s', try 'list' for help", reqname)
-			}
-			res, err := handler.handler(req.Arguments)
-			if err != nil {
-				return err
-			}
-			if resp.Response, err = json.Marshal(res); err != nil {
-				return fmt.Errorf("failed to marshal response: %w", err)
-			}
-			resp.Status = "success"
 			return nil
 		}(); err != nil {
+			req.Name = ""
+		}
+		resp := a.Dispatch(req)
+		if err != nil {
 			resp.Status = "error"
 			resp.Error = err.Error()
 		}
@@ -436,6 +445,42 @@ func (a *AdminSocket) handleRequest(conn net.Conn) {
 			continue
 		}
 	}
+}
+
+// Dispatch calls a registered admin API handler and returns the same response
+// envelope used by the socket protocol.
+func (a *AdminSocket) Dispatch(req AdminSocketRequest) AdminSocketResponse {
+	if req.Arguments == nil {
+		req.Arguments = []byte("{}")
+	}
+	resp := AdminSocketResponse{Request: req}
+	if req.Name == "" {
+		resp.Status = "error"
+		resp.Error = "no request specified"
+		return resp
+	}
+	reqname := strings.ToLower(req.Name)
+	a.handlersMu.RLock()
+	handler, ok := a.handlers[reqname]
+	a.handlersMu.RUnlock()
+	if !ok {
+		resp.Status = "error"
+		resp.Error = fmt.Sprintf("unknown action '%s', try 'list' for help", reqname)
+		return resp
+	}
+	res, err := handler.handler(req.Arguments)
+	if err != nil {
+		resp.Status = "error"
+		resp.Error = err.Error()
+		return resp
+	}
+	if resp.Response, err = json.Marshal(res); err != nil {
+		resp.Status = "error"
+		resp.Error = fmt.Sprintf("failed to marshal response: %v", err)
+		return resp
+	}
+	resp.Status = "success"
+	return resp
 }
 
 type DataUnit uint64

@@ -17,6 +17,10 @@ func (c *AdminSocket) _applyOption(opt SetupOption) {
 	switch v := opt.(type) {
 	case ListenAddress:
 		c.config.listenaddr = v
+	case WebListenAddress:
+		c.config.webListenaddr = v
+	case WebStaticDir:
+		c.config.webStaticDir = v
 	case LogLookups:
 		c.logLookups()
 	}
@@ -29,6 +33,14 @@ type SetupOption interface {
 type ListenAddress string
 
 func (a ListenAddress) isSetupOption() {}
+
+type WebListenAddress string
+
+func (a WebListenAddress) isSetupOption() {}
+
+type WebStaticDir string
+
+func (d WebStaticDir) isSetupOption() {}
 
 type LogLookups struct{}
 

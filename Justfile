@@ -16,7 +16,7 @@ tidy:
 	go work sync
 
 # Run a temporary daemon with sockstun and global built-in autopeering enabled.
-# Override with SOCKS_LISTEN=127.0.0.1:1081 ADMIN_LISTEN=tcp://localhost:9002 LOGLEVEL=debug.
+# Override with SOCKS_LISTEN=127.0.0.1:1081 ADMIN_LISTEN=tcp://localhost:9002 ADMIN_WEB_LISTEN=127.0.0.1:9003 LOGLEVEL=debug.
 run-sockstun-autopeer:
 	@tmpdir="$(mktemp -d)"; \
 	trap 'rm -rf "${tmpdir}"' EXIT; \
@@ -27,9 +27,10 @@ run-sockstun-autopeer:
 	openssl req -x509 -new -nodes -key "${ca_key}" -sha256 -days 1 -out "${ca_crt}" -subj "/CN=ygg sockstun MITM temporary CA"; \
 	countries="$(jq -r '[.peers[].country] | unique | join(",")' ygglib/autopeer/builtin_peers_generated.json)"; \
 	go run ./yggd/yggd -genconf -json \
-		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" --arg ca_crt "${ca_crt}" --arg ca_key "${ca_key}" '.AdminListen = $admin | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .TunSocksDNSFallback = "[300:6223::53]:53" | .TunSocksTLSMITM = { ca_file: $ca_crt, key_file: $ca_key } | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
+		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg admin_web "${ADMIN_WEB_LISTEN:-127.0.0.1:9003}" --arg socks "${SOCKS_LISTEN:-127.0.0.1:1080}" --arg countries "${countries}" --arg ca_crt "${ca_crt}" --arg ca_key "${ca_key}" '.AdminListen = $admin | .AdminWebListen = $admin_web | .TunType = "sockstun" | .IfName = "auto" | .TunSocksListen = $socks | .TunSocksDNSFallback = "[300:6223::53]:53" | .TunSocksTLSMITM = { ca_file: $ca_crt, key_file: $ca_key } | .Listen = [] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ["tls", "tcp"]' \
 		>"${cfg}"; \
 	echo "Admin: ${ADMIN_LISTEN:-tcp://localhost:9001}"; \
+	echo "Admin web: http://${ADMIN_WEB_LISTEN:-127.0.0.1:9003}/"; \
 	echo "SOCKS: ${SOCKS_LISTEN:-127.0.0.1:1080}"; \
 	echo "MITM CA: ${ca_crt}"; \
 	echo "Curl:  curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} http://myip.ygg"; \

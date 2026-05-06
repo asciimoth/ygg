@@ -17,7 +17,8 @@ At runtime, the system is composed as:
 5. `jumper` can use remote NodeInfo advertisements to add opportunistic direct
    links to nodes that are already reachable through the overlay.
 6. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
-7. `admin` exposes a local control API over TCP or UNIX sockets.
+7. `admin` exposes a local control API over TCP or UNIX sockets and can
+   optionally expose the same API through an HTTP admin panel.
    The daemon wires admin adapters to `core`, `multicast`, and `tun` at
    startup time.
 8. `multicast` optionally discovers local peers and feeds them back into
@@ -54,7 +55,7 @@ Key outputs consumed by other packages:
 - `Transport.DefaultNetwork`, `Transport.NetworkMappings` for daemon-managed
   `transport.Manager` construction
 - `Jumper` for optional NodeInfo-based direct peering
-- `AdminListen`
+- `AdminListen`, `AdminWebListen`, `AdminWebStaticDir`
 - `LocalDNSListen` for the optional daemon-owned local DNS listener
 - `MulticastInterfaces`
 - `TunType`, `IfName`, `IfMTU`, `TunSocksListen`, `TunMWO`, `TunMRO` for
@@ -327,6 +328,9 @@ Behavior:
 - Listens on UNIX or TCP depending on configuration.
 - Accepts JSON requests of the form `{request, arguments, keepalive}`.
 - Dispatches to registered handlers and returns JSON responses.
+- Optionally listens on local TCP for an HTTP admin API under `/.yggapi` and
+  serves either built-in static panel assets or files from `AdminWebStaticDir`
+  on all other paths.
 - Exposes `getTransport` and `setTransport` for inspecting and mutating the
   runtime `transport.Manager` used by `core`.
 
@@ -631,6 +635,7 @@ then explicitly attached to `tun.TunAdapter`.
 
 `admin.AdminSocket` exposes a handler registry:
 - `AddHandler(name, desc, args, handler)`
+- `Dispatch(request)` for transports that reuse the same registered handlers.
 
 Runtime wiring is owned by `yggd/yggd`:
 - `admin.SetupCoreHandlers()`
@@ -721,4 +726,5 @@ preserving file layout.
   peers so they are not
   blocked by the normal allowed-key policy.
 - `admin` currently has no authentication and should be treated as a local
-  privileged control surface.
+  privileged control surface. This applies to both the IPC socket and the
+  optional HTTP admin listener.

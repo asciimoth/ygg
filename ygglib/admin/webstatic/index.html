@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yggdrasil Admin</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Yggdrasil Admin</h1>
+        <p id="status">Connecting</p>
+      </div>
+      <button id="refresh" type="button">Refresh</button>
+    </header>
+
+    <section class="summary" aria-label="Node summary">
+      <div>
+        <span>Address</span>
+        <strong id="address">-</strong>
+      </div>
+      <div>
+        <span>Subnet</span>
+        <strong id="subnet">-</strong>
+      </div>
+      <div>
+        <span>Peers</span>
+        <strong id="peers">-</strong>
+      </div>
+      <div>
+        <span>Sessions</span>
+        <strong id="sessions">-</strong>
+      </div>
+    </section>
+
+    <section>
+      <h2>Peers</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>URI</th>
+              <th>State</th>
+              <th>RX</th>
+              <th>TX</th>
+            </tr>
+          </thead>
+          <tbody id="peer-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>API Console</h2>
+      <form id="console">
+        <label>
+          Command
+          <select id="command"></select>
+        </label>
+        <label>
+          Arguments JSON
+          <textarea id="arguments" spellcheck="false">{}</textarea>
+        </label>
+        <button type="submit">Run</button>
+      </form>
+      <pre id="output"></pre>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

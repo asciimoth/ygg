@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
@@ -98,6 +101,67 @@ func TestAdminSocketConcurrentHandlerAccess(t *testing.T) {
 		t.Fatalf("request loop failed: %v", err)
 	}
 	<-serverDone
+}
+
+func TestDispatchUsesRegisteredHandlers(t *testing.T) {
+	a := &AdminSocket{
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	if err := a.AddHandler("echo", "echo", nil, func(in json.RawMessage) (interface{}, error) {
+		var req map[string]string
+		if err := json.Unmarshal(in, &req); err != nil {
+			return nil, err
+		}
+		return req, nil
+	}); err != nil {
+		t.Fatalf("AddHandler(echo): %v", err)
+	}
+
+	resp := a.Dispatch(AdminSocketRequest{
+		Name:      "echo",
+		Arguments: json.RawMessage(`{"value":"ok"}`),
+	})
+	if resp.Status != "success" {
+		t.Fatalf("unexpected status %q: %s", resp.Status, resp.Error)
+	}
+	if string(resp.Response) != `{"value":"ok"}` {
+		t.Fatalf("unexpected response %s", resp.Response)
+	}
+}
+
+func TestWebAPIHandlerDispatchesSocketRequestEnvelope(t *testing.T) {
+	a := &AdminSocket{
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	if err := a.AddHandler("ping", "ping", nil, func(json.RawMessage) (interface{}, error) {
+		return map[string]string{"pong": "true"}, nil
+	}); err != nil {
+		t.Fatalf("AddHandler(ping): %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"request":"ping","arguments":{}}`)
+	req := httptest.NewRequest(http.MethodPost, "/.yggapi", body)
+	rec := httptest.NewRecorder()
+	a.webAPIHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected HTTP status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp AdminSocketResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	var out map[string]string
+	if err := json.Unmarshal(resp.Response, &out); err != nil {
+		t.Fatalf("unmarshal nested response: %v", err)
+	}
+	if resp.Status != "success" || out["pong"] != "true" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
 }
 
 func TestSetupConfigHandlersExposesAllNodeConfigOptions(t *testing.T) {

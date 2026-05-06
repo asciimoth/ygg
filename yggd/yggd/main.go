@@ -350,6 +350,8 @@ func main() {
 	{
 		options := []admin.SetupOption{
 			admin.ListenAddress(cfg.AdminListen),
+			admin.WebListenAddress(cfg.AdminWebListen),
+			admin.WebStaticDir(cfg.AdminWebStaticDir),
 		}
 		if cfg.LogLookups {
 			options = append(options, admin.LogLookups{})

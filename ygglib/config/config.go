@@ -48,6 +48,8 @@ type NodeConfig struct {
 	InterfacePeers       map[string][]string        `comment:"List of connection strings for outbound peer connections in URI format,\narranged by source interface, e.g. { \"eth0\": [ \"tls://a.b.c.d:e\" ] }.\nYou should only use this option if your machine is multi-homed and you\nwant to establish outbound peer connections on different interfaces.\nOtherwise you should use \"Peers\"."`
 	Listen               []string                   `comment:"Listen addresses for incoming connections. You will need to add\nlisteners in order to accept incoming peerings from non-local nodes.\nThis is not required if you wish to establish outbound peerings only.\nMulticast peer discovery will work regardless of any listeners set\nhere. Each listener should be specified in URI format as above.\nSupported daemon listener schemes are tcp, tls, ws, quic and unix.\nUse wss for outbound peers behind a secure WebSocket reverse proxy;\ndirect wss listeners are not supported. Example listeners:\ntls://0.0.0.0:0, quic://[::]:0, ws://0.0.0.0:0 or unix:///var/run/ygg.sock."`
 	AdminListen          string                     `comment:"Listen address for admin connections. Default is to listen for local\nconnections either on TCP/9001 or a UNIX socket depending on your\nplatform. Use this value for yggdrasilctl -endpoint=X. To disable\nthe admin socket, use the value \"none\" instead.\n\nIf this is left at the platform default and startup TUN does not need\nnative OS TUN privileges (TunType \"none\", \"sockstun\" or \"outproxy\", or the\n\"socks\" alias), Yggdrasil falls back to tcp://localhost:9001 when it cannot\ncreate a privileged UNIX socket path such as /var/run/yggdrasil.sock.\nSet AdminListen explicitly to force a specific admin endpoint."`
+	AdminWebListen       string                     `comment:"Optional TCP listen address for the HTTP admin API and web panel.\nWhen set, requests under /.yggapi are dispatched to the same admin\nhandlers as the local admin socket, while other paths serve static files.\nUse \"none\" or an empty value to disable it. Example:\nAdminWebListen: 127.0.0.1:9002"`
+	AdminWebStaticDir    string                     `comment:"Optional directory of static files for the HTTP admin panel. When empty,\nYggdrasil serves its built-in minimal web interface. This only has effect\nwhen AdminWebListen is enabled."`
 	LocalDNSListen       string                     `comment:"Optional local DNS listen address for mesh-name resolution. When set,\nYggdrasil starts a simple local DNS server that answers IN A and IN AAAA\nqueries through mnlib.Resolver. Unsupported record types are rejected.\nExample:\nLocalDNSListen: 127.0.0.1:5353"`
 	MulticastInterfaces  []MulticastInterfaceConfig `comment:"Configuration for which interfaces multicast peer discovery should be\nenabled on. Regex is a regular expression which is matched against an\ninterface name, and interfaces use the first configuration that they\nmatch against. Beacon controls whether or not your node advertises its\npresence to others, whereas Listen controls whether or not your node\nlistens out for and tries to connect to other advertising nodes. See\nhttps://yggdrasil-network.github.io/configurationref.html#multicastinterfaces\nfor more supported options."`
 	AllowedPublicKeys    []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
@@ -137,6 +139,8 @@ func GenerateConfig() *NodeConfig {
 	cfg.NewPrivateKey()
 	cfg.Listen = []string{}
 	cfg.AdminListen = defaults.DefaultAdminListen
+	cfg.AdminWebListen = ""
+	cfg.AdminWebStaticDir = ""
 	cfg.LocalDNSListen = ""
 	cfg.Peers = []string{}
 	cfg.InterfacePeers = map[string][]string{}
@@ -232,6 +236,8 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.TunSocksNoResolve = normalizeStringSlice(cfg.TunSocksNoResolve)
 	cfg.TunSocksTLSMITM.normalize()
 	cfg.LocalDNSListen = strings.TrimSpace(cfg.LocalDNSListen)
+	cfg.AdminWebListen = strings.TrimSpace(cfg.AdminWebListen)
+	cfg.AdminWebStaticDir = strings.TrimSpace(cfg.AdminWebStaticDir)
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
 		f, err := os.ReadFile(cfg.PrivateKeyPath)
