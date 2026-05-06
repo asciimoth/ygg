@@ -16,6 +16,11 @@ type lookupIPNetwork interface {
 	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
 }
 
+var nativeListen = func(ctx context.Context, network, address string) (net.Listener, error) {
+	var lc net.ListenConfig
+	return lc.Listen(ctx, network, address)
+}
+
 func unwrapNetwork(network Network) any {
 	if network == nil {
 		return nil
@@ -161,6 +166,13 @@ func resolveListenAddr(
 	if iface == nil {
 		return u.Host
 	}
+	return resolveListenAddrForInterfaceName(u, iface.Name())
+}
+
+func resolveListenAddrForInterfaceName(u *url.URL, ifname string) string {
+	if ifname == "" {
+		return u.Host
+	}
 	host, port, err := net.SplitHostPort(u.Host)
 	if err != nil {
 		return u.Host
@@ -168,11 +180,26 @@ func resolveListenAddr(
 	ip := net.ParseIP(host)
 	if ip != nil && !ip.IsUnspecified() {
 		if ip.IsLinkLocalUnicast() {
-			return net.JoinHostPort(host+"%"+iface.Name(), port)
+			return net.JoinHostPort(host+"%"+ifname, port)
 		}
 		return u.Host
 	}
 	return net.JoinHostPort(host, port)
+}
+
+func linkLocalListenAddr(u *url.URL, ifname string) (string, bool) {
+	if ifname == "" {
+		return "", false
+	}
+	host, _, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return "", false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLinkLocalUnicast() {
+		return "", false
+	}
+	return resolveListenAddrForInterfaceName(u, ifname), true
 }
 
 func tcpListen(
@@ -187,11 +214,19 @@ func tcpListen(
 
 	iface, err := getInterface(network, opts.SourceInterface)
 	if err != nil {
-		return network.Listen(ctx, "tcp", u.Host)
+		if addr, ok := linkLocalListenAddr(u, opts.SourceInterface); ok && network != nil && network.IsNative() {
+			return nativeListen(ctx, "tcp6", addr)
+		}
+		return network.Listen(ctx, "tcp", resolveListenAddrForInterfaceName(u, opts.SourceInterface))
 	}
 
 	addr := resolveListenAddr(u, iface)
-	listener, err := network.Listen(ctx, "tcp", addr)
+	var listener net.Listener
+	if scopedAddr, ok := linkLocalListenAddr(u, opts.SourceInterface); ok && network != nil && network.IsNative() {
+		listener, err = nativeListen(ctx, "tcp6", scopedAddr)
+	} else {
+		listener, err = network.Listen(ctx, "tcp", addr)
+	}
 	if err != nil {
 		return nil, err
 	}

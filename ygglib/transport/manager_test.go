@@ -839,6 +839,62 @@ func TestSourceInterfaceIsBestEffort(t *testing.T) {
 	_ = ln.Close()
 }
 
+func TestListenScopesLinkLocalAddressWhenInterfaceLookupUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var gotAddress string
+	transport := NewTCPTransport()
+	netw := &stubNetwork{
+		listenFn: func(_ context.Context, _ string, address string) (net.Listener, error) {
+			gotAddress = address
+			return newSingleConnListener(), nil
+		},
+	}
+
+	ln, err := transport.Listen(context.Background(), netw, mustParseURL(t, "tcp://[fe80::1]:0"), Options{
+		SourceInterface: "wlp0s20f3",
+	})
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	_ = ln.Close()
+
+	if gotAddress != "[fe80::1%wlp0s20f3]:0" {
+		t.Fatalf("listen address = %q, want %q", gotAddress, "[fe80::1%wlp0s20f3]:0")
+	}
+}
+
+func TestNativeListenKeepsLinkLocalZone(t *testing.T) {
+	origNativeListen := nativeListen
+	t.Cleanup(func() {
+		nativeListen = origNativeListen
+	})
+
+	var gotNetwork, gotAddress string
+	nativeListen = func(_ context.Context, network, address string) (net.Listener, error) {
+		gotNetwork = network
+		gotAddress = address
+		return newSingleConnListener(), nil
+	}
+
+	transport := NewTCPTransport()
+	netw := &stubNetwork{native: true}
+	ln, err := transport.Listen(context.Background(), netw, mustParseURL(t, "tcp://[fe80::1]:0"), Options{
+		SourceInterface: "wlp0s20f3",
+	})
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	_ = ln.Close()
+
+	if gotNetwork != "tcp6" {
+		t.Fatalf("listen network = %q, want %q", gotNetwork, "tcp6")
+	}
+	if gotAddress != "[fe80::1%wlp0s20f3]:0" {
+		t.Fatalf("listen address = %q, want %q", gotAddress, "[fe80::1%wlp0s20f3]:0")
+	}
+}
+
 type stubTransport struct {
 	schemes  []string
 	dialFn   func(context.Context, Network, *url.URL, Options) (Conn, error)
@@ -875,11 +931,12 @@ func (t *stubTransport) Listen(
 
 type stubNetwork struct {
 	name     string
+	native   bool
 	dialFn   func(context.Context, string, string) (net.Conn, error)
 	listenFn func(context.Context, string, string) (net.Listener, error)
 }
 
-func (n *stubNetwork) IsNative() bool { return false }
+func (n *stubNetwork) IsNative() bool { return n.native }
 func (n *stubNetwork) Dial(ctx context.Context, network, address string) (net.Conn, error) {
 	if n.dialFn != nil {
 		return n.dialFn(ctx, network, address)

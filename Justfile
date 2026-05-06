@@ -33,6 +33,11 @@ run-sockstun-autopeer:
 	echo "HTTPS: curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} --cacert ${ca_crt} https://myip.ygg"; \
 	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
 
+run:
+  rm ./ygg
+  go build -o ygg ./yggd/yggd
+  sudo ./ygg -autoconf
+
 # Docker-based compatibility tests against pinned upstream yggdrasil-go. Uses sudo.
 test-compat:
 	sudo ./tests/compat/run.sh
