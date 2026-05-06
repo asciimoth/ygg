@@ -96,6 +96,20 @@ func TestGenerateConfigAutoPeerDefaults(t *testing.T) {
 	}
 }
 
+func TestGenerateConfigJumperDefaults(t *testing.T) {
+	cfg := GenerateConfig()
+
+	if cfg.Jumper.Enabled {
+		t.Fatal("jumper should be disabled by default")
+	}
+	if len(cfg.Jumper.Addresses) != 0 {
+		t.Fatalf("unexpected jumper addresses: %#v", cfg.Jumper.Addresses)
+	}
+	if cfg.Jumper.CheckInterval != "10s" || cfg.Jumper.LinkTimeout != "30s" {
+		t.Fatalf("unexpected jumper intervals: check=%q link=%q", cfg.Jumper.CheckInterval, cfg.Jumper.LinkTimeout)
+	}
+}
+
 func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 	cfg := GenerateConfig()
 
@@ -186,6 +200,12 @@ func TestExampleConfigIncludesAutoPeer(t *testing.T) {
 	if cfg.AutoPeer.FetchInterval != "1h" || cfg.AutoPeer.CheckInterval != "1m" {
 		t.Fatalf("unexpected example autopeer intervals: fetch=%q check=%q", cfg.AutoPeer.FetchInterval, cfg.AutoPeer.CheckInterval)
 	}
+	if cfg.Jumper.Enabled {
+		t.Fatal("expected example jumper to be disabled")
+	}
+	if len(cfg.Jumper.Addresses) != 0 || cfg.Jumper.CheckInterval != "10s" || cfg.Jumper.LinkTimeout != "30s" {
+		t.Fatalf("unexpected example jumper config: %#v", cfg.Jumper)
+	}
 	if cfg.Transport.DefaultNetwork.Name() != "native" || cfg.Transport.DefaultNetwork.IsNull() {
 		t.Fatalf("unexpected example default transport network: %#v", cfg.Transport.DefaultNetwork)
 	}
@@ -197,6 +217,14 @@ func TestAutoPeerConfigRejectsInvalidDuration(t *testing.T) {
 	cfg.AutoPeer.FetchInterval = "nope"
 	if err := cfg.postprocessConfig(); err == nil {
 		t.Fatal("expected invalid autopeer fetch interval to fail")
+	}
+}
+
+func TestJumperConfigRejectsInvalidDuration(t *testing.T) {
+	cfg := GenerateConfig()
+	cfg.Jumper.LinkTimeout = "nope"
+	if err := cfg.postprocessConfig(); err == nil {
+		t.Fatal("expected invalid jumper link timeout to fail")
 	}
 }
 

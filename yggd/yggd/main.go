@@ -37,6 +37,7 @@ import (
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/asciimoth/ygg/ygglib/ipv6rwc"
+	"github.com/asciimoth/ygg/ygglib/jumper"
 	"github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/multicast"
 	"github.com/asciimoth/ygg/ygglib/outproxy"
@@ -52,6 +53,7 @@ type node struct {
 	tun       *yggtun.TunAdapter
 	multicast *multicast.Multicast
 	autopeer  *autopeer.Manager
+	jumper    *jumper.Manager
 	admin     *admin.AdminSocket
 	localDNS  *localDNSServer
 }
@@ -260,9 +262,14 @@ func main() {
 			IP:   net.ParseIP("200::"),
 			Mask: net.CIDRMask(7, 128),
 		}
+		nodeInfo := cfg.NodeInfo
+		if cfg.Jumper.Enabled {
+			nodeInfo = mergeNodeInfo(nodeInfo, jumper.AdvertisedNodeInfo(cfg.Jumper.Addresses))
+		}
+
 		options := []core.SetupOption{
 			core.TransportManager{Manager: manager},
-			core.NodeInfo(cfg.NodeInfo),
+			core.NodeInfo(nodeInfo),
 			core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
 			core.PeerFilter(func(ip net.IP) bool {
 				return !iprange.Contains(ip)
@@ -317,6 +324,19 @@ func main() {
 		if cfg.AutoPeer.Enabled {
 			n.autopeer.Start()
 		}
+
+		jumperCheckInterval, err := time.ParseDuration(cfg.Jumper.CheckInterval)
+		if err != nil {
+			panic(err)
+		}
+		jumperLinkTimeout, err := time.ParseDuration(cfg.Jumper.LinkTimeout)
+		if err != nil {
+			panic(err)
+		}
+		n.jumper = jumper.NewManager(n.core, logger, jumper.Config{
+			CheckInterval: jumperCheckInterval,
+			LinkTimeout:   jumperLinkTimeout,
+		})
 	}
 
 	// Set up the admin socket.
@@ -340,6 +360,14 @@ func main() {
 		if n.admin != nil {
 			n.admin.SetupCoreHandlers()
 			n.admin.SetupAutoPeerHandlers(admin.NewAutoPeerController(n.autopeer, cfg.AutoPeer.Enabled))
+			n.admin.SetupJumperHandlers(admin.NewJumperController(
+				n.jumper,
+				n.core,
+				cfg.NodeInfo,
+				cfg.NodeInfoPrivacy,
+				cfg.Jumper.Enabled,
+				cfg.Jumper.Addresses,
+			))
 		}
 	}
 
@@ -402,6 +430,15 @@ func main() {
 		}
 	}
 
+	// Set up the optional jumper module after TUN so both modules can subscribe
+	// to path notifications.
+	if n.jumper != nil {
+		n.core.AddPathNotify(n.jumper.NotifyTraffic)
+		if cfg.Jumper.Enabled {
+			n.jumper.Start()
+		}
+	}
+
 	// Set up optional local DNS server.
 	if cfg.LocalDNSListen != "" {
 		if n.localDNS, err = newLocalDNSServer(cfg.LocalDNSListen, localDNSNetwork(tunController), logger); err != nil {
@@ -455,6 +492,7 @@ func main() {
 	// Shut down the node.
 	_ = n.localDNS.Stop()
 	_ = n.admin.Stop()
+	_ = n.jumper.Close()
 	_ = n.autopeer.Close()
 	_ = n.multicast.Stop()
 	_ = n.tun.Stop()
@@ -463,6 +501,20 @@ func main() {
 
 func isPermissionError(err error) bool {
 	return os.IsPermission(err) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+func mergeNodeInfo(base map[string]interface{}, overlay map[string]interface{}) map[string]interface{} {
+	if len(overlay) == 0 {
+		return base
+	}
+	merged := make(map[string]interface{}, len(base)+len(overlay))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range overlay {
+		merged[key] = value
+	}
+	return merged
 }
 
 func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.Network, error) {

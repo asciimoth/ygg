@@ -14,19 +14,21 @@ At runtime, the system is composed as:
 4. `autopeer` fetches public peer lists from one or more external sources and
    can maintain public peer counts at runtime by adding filtered candidates to
    `core` when configured thresholds are not met.
-5. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
-6. `admin` exposes a local control API over TCP or UNIX sockets.
+5. `jumper` can use remote NodeInfo advertisements to add opportunistic direct
+   links to nodes that are already reachable through the overlay.
+6. `core` creates the Yggdrasil node and owns routed encrypted packet delivery.
+7. `admin` exposes a local control API over TCP or UNIX sockets.
    The daemon wires admin adapters to `core`, `multicast`, and `tun` at
    startup time.
-7. `multicast` optionally discovers local peers and feeds them back into
+8. `multicast` optionally discovers local peers and feeds them back into
    `core` through a small runtime adapter.
-8. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
-9. `tun` supervises a runtime attachment for that IPv6 packet stream.
-10. `tunnative` provides OS-specific native TUN creation/configuration for the
+9. `ipv6rwc` adapts `core` packet routing into IPv6 packet semantics.
+10. `tun` supervises a runtime attachment for that IPv6 packet stream.
+11. `tunnative` provides OS-specific native TUN creation/configuration for the
    daemon.
-11. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
+12. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
     daemon.
-12. `outproxy` provides a VTun-backed Yggdrasil-hosted SOCKS outproxy
+13. `outproxy` provides a VTun-backed Yggdrasil-hosted SOCKS outproxy
     implementation for the daemon.
 
 `yggd/yggd` is the composition root. It wires the packages together but
@@ -51,6 +53,7 @@ Key outputs consumed by other packages:
 - `AllowedPublicKeys`, `NodeInfo`, `NodeInfoPrivacy`
 - `Transport.DefaultNetwork`, `Transport.NetworkMappings` for daemon-managed
   `transport.Manager` construction
+- `Jumper` for optional NodeInfo-based direct peering
 - `AdminListen`
 - `LocalDNSListen` for the optional daemon-owned local DNS listener
 - `MulticastInterfaces`
@@ -74,7 +77,7 @@ Main types:
 Runtime use:
 - `core.Logger` and package-local logger aliases resolve to
   `logger.Logger`, so callers pass one logging contract through `core`,
-  `admin`, `autopeer`, `multicast`, `tun`, `sockstun`, `outproxy`, and
+  `admin`, `autopeer`, `jumper`, `multicast`, `tun`, `sockstun`, `outproxy`, and
   `tunnative`.
 - `logger.StdLogger` wraps Go's `log` package, supports error/warn/info/debug
   filtering, and is safe for concurrent use.
@@ -263,6 +266,39 @@ Current boundary:
 - Integration happens through a tiny peer-management interface implemented by
   higher layers, keeping source fetching and peer-add policy decoupled from the
   transport and handshake logic inside `core`.
+
+### `jumper`
+
+Purpose:
+- Publish explicit public peering addresses in local NodeInfo.
+- Watch routed traffic destinations through `core` path notifications.
+- Fetch remote NodeInfo and try remote jumper addresses as direct peer links.
+- Remove stale disconnected links that jumper added itself.
+
+Main type:
+- `jumper.Manager`
+
+Behavior:
+- Uses the NodeInfo key `jumper.addresses`, for example
+  `{"jumper":{"addresses":["tls://example.net:12345"]}}`.
+- Does not host a separate discovery service and does not perform NAT
+  traversal. Published addresses must already be reachable by remote nodes.
+- Does nothing when the destination is already directly connected.
+- Does nothing when one of the destination's published addresses is already
+  configured as a local link.
+- Adds at most one published address per check. If a jumper-owned link remains
+  disconnected past `Jumper.LinkTimeout`, it removes that link and can try the
+  next published address.
+- Tracks ownership by URI and only removes links that this manager added.
+
+Current boundary:
+- `jumper` depends on a small core-facing interface for `GetNodeInfo`,
+  `GetPeers`, `AddPeer`, and `RemovePeer`.
+- `yggd/yggd` merges configured `Jumper.Addresses` into NodeInfo before
+  `core.New`, then subscribes the manager with `core.AddPathNotify`.
+- The admin API exposes `getJumper` and `setJumper` for runtime enablement,
+  advertised address updates, and timing changes. Updating addresses through
+  admin refreshes the local NodeInfo advertisement.
 
 #### Protocol subsystem
 
@@ -627,6 +663,8 @@ For local application traffic:
    public key from the destination address or subnet.
 4. `core` writes the payload into the Ironwood encrypted routed overlay.
 5. `core.links` ensures at least one direct peer path exists to carry traffic.
+6. If `jumper` is enabled, the same destination key notification can trigger a
+   NodeInfo lookup and an opportunistic direct link attempt.
 
 For inbound traffic:
 

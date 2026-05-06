@@ -44,7 +44,7 @@ type Core struct {
 		nodeinfoPrivacy    NodeInfoPrivacy            // immutable after startup
 		_allowedPublicKeys map[[32]byte]struct{}      // configurable after startup
 	}
-	pathNotify func(ed25519.PublicKey)
+	pathNotifiers []func(ed25519.PublicKey)
 }
 
 func New(cert *tls.Certificate, logger Logger, opts ...SetupOption) (*Core, error) {
@@ -223,15 +223,29 @@ func (c *Core) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 func (c *Core) doPathNotify(key ed25519.PublicKey) {
 	c.Act(nil, func() {
-		if c.pathNotify != nil {
-			c.pathNotify(key)
+		for _, notify := range c.pathNotifiers {
+			if notify != nil {
+				notify(key)
+			}
 		}
 	})
 }
 
 func (c *Core) SetPathNotify(notify func(ed25519.PublicKey)) {
 	c.Act(nil, func() {
-		c.pathNotify = notify
+		c.pathNotifiers = nil
+		if notify != nil {
+			c.pathNotifiers = append(c.pathNotifiers, notify)
+		}
+	})
+}
+
+func (c *Core) AddPathNotify(notify func(ed25519.PublicKey)) {
+	if notify == nil {
+		return
+	}
+	c.Act(nil, func() {
+		c.pathNotifiers = append(c.pathNotifiers, notify)
 	})
 }
 

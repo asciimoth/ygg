@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/asciimoth/ygg/ygglib/autopeer"
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
+	"github.com/asciimoth/ygg/ygglib/jumper"
 	"github.com/asciimoth/ygg/ygglib/transport"
 	"github.com/asciimoth/ygg/ygglib/transportcfg"
 )
@@ -26,6 +28,13 @@ func (testLogger) Err(...any)            {}
 func (testLogger) Errf(string, ...any)   {}
 func (testLogger) Fatal(...any)          {}
 func (testLogger) Fatalf(string, ...any) {}
+
+type stubJumperCore struct{}
+
+func (stubJumperCore) AddPeer(*url.URL, string) error              { return nil }
+func (stubJumperCore) RemovePeer(*url.URL, string) error           { return nil }
+func (stubJumperCore) GetPeers() []core.PeerInfo                   { return nil }
+func (stubJumperCore) GetNodeInfo(string) (json.RawMessage, error) { return nil, nil }
 
 func TestAdminSocketConcurrentHandlerAccess(t *testing.T) {
 	a := &AdminSocket{
@@ -201,6 +210,112 @@ func TestAutoPeerControllerApply(t *testing.T) {
 
 	if err := manager.Close(); err != nil {
 		t.Fatalf("manager close failed: %v", err)
+	}
+}
+
+type stubNodeInfoUpdater struct {
+	info    map[string]interface{}
+	privacy bool
+}
+
+func (s *stubNodeInfoUpdater) SetNodeInfo(info map[string]interface{}, privacy bool) error {
+	s.info = info
+	s.privacy = privacy
+	return nil
+}
+
+func TestSetupJumperHandlers(t *testing.T) {
+	manager := jumper.NewManager(&stubJumperCore{}, testLogger{}, jumper.Config{
+		CheckInterval: time.Minute,
+		LinkTimeout:   2 * time.Minute,
+	})
+	updater := &stubNodeInfoUpdater{}
+	controller := NewJumperController(manager, updater, map[string]interface{}{"name": "node"}, true, false, nil)
+
+	a := &AdminSocket{
+		log:      testLogger{},
+		handlers: make(map[string]handler),
+		done:     make(chan struct{}),
+	}
+	a.SetupJumperHandlers(controller)
+
+	h, ok := a.handlers["getjumper"]
+	if !ok {
+		t.Fatal("expected getJumper handler to be registered")
+	}
+	res, err := h.handler(nil)
+	if err != nil {
+		t.Fatalf("getJumper handler returned error: %v", err)
+	}
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal getJumper response: %v", err)
+	}
+	var resp GetJumperResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal getJumper response: %v", err)
+	}
+	if resp.Enabled || resp.Active {
+		t.Fatalf("expected disabled inactive jumper, got %#v", resp)
+	}
+	if resp.CheckInterval != "1m0s" || resp.LinkTimeout != "2m0s" {
+		t.Fatalf("unexpected intervals: %#v", resp)
+	}
+}
+
+func TestJumperControllerApply(t *testing.T) {
+	manager := jumper.NewManager(&stubJumperCore{}, testLogger{}, jumper.Config{})
+	updater := &stubNodeInfoUpdater{}
+	controller := NewJumperController(
+		manager,
+		updater,
+		map[string]interface{}{"name": "node", jumper.NodeInfoKey: "old"},
+		true,
+		false,
+		nil,
+	)
+
+	if err := controller.Apply(&SetJumperRequest{
+		Enabled:       "true",
+		Addresses:     "tls://node.example:1234, tcp://node.example:5678",
+		CheckInterval: "5s",
+		LinkTimeout:   "10s",
+	}); err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	defer manager.Close()
+
+	snapshot := controller.Snapshot()
+	if snapshot == nil {
+		t.Fatal("expected jumper snapshot")
+	}
+	if !snapshot.Enabled || !snapshot.Active {
+		t.Fatalf("expected enabled active jumper, got %#v", snapshot)
+	}
+	if snapshot.CheckInterval != "5s" || snapshot.LinkTimeout != "10s" {
+		t.Fatalf("unexpected intervals: %#v", snapshot)
+	}
+	if len(snapshot.Addresses) != 2 || snapshot.Addresses[0] != "tls://node.example:1234" {
+		t.Fatalf("unexpected addresses: %#v", snapshot.Addresses)
+	}
+	if !updater.privacy {
+		t.Fatal("expected nodeinfo privacy flag to be preserved")
+	}
+	if updater.info["name"] != "node" {
+		t.Fatalf("expected base nodeinfo to be preserved: %#v", updater.info)
+	}
+	if updater.info[jumper.NodeInfoKey] == "old" {
+		t.Fatalf("expected stale jumper nodeinfo to be replaced: %#v", updater.info)
+	}
+
+	if err := controller.Apply(&SetJumperRequest{Enabled: "false"}); err != nil {
+		t.Fatalf("disable returned error: %v", err)
+	}
+	if manager.IsStarted() {
+		t.Fatal("expected jumper manager to stop")
+	}
+	if _, ok := updater.info[jumper.NodeInfoKey]; ok {
+		t.Fatalf("expected jumper nodeinfo to be removed when disabled: %#v", updater.info)
 	}
 }
 

@@ -53,6 +53,7 @@ type NodeConfig struct {
 	AllowedPublicKeys    []string                   `comment:"List of peer public keys to allow incoming peering connections\nfrom. If left empty/undefined then all connections will be allowed\nby default. This does not affect outgoing peerings, nor does it\naffect link-local peers discovered via multicast.\nWARNING: THIS IS NOT A FIREWALL and DOES NOT limit who can reach\nopen ports or services running on your machine!"`
 	Transport            TransportConfig            `comment:"Configuration for the transport manager networks used by core.\nIf this block is omitted entirely, Yggdrasil uses the built-in\nnative network as the default network and installs nil host-based\nmappings for *.onion, *.i2p and *.loki so those peers stay disabled\nunless you enable them explicitly. Set DefaultNetwork to null to\ndisable the default network entirely. Set a NetworkMappings entry\nto null to keep the mapping but disable its network. Supported\nnon-null values today are \"native\" or a socks network object with a\nProxyURL such as \"socks5://proxy:1080\"."`
 	AutoPeer             AutoPeerConfig             `comment:"Configuration for public-peer autopeering. When enabled, Yggdrasil\nwill periodically fetch peer candidates from configured sources and\nadd one matching peer when your runtime connectivity thresholds are\nnot met. Sources may be URLs returning public-peers JSON documents\nor the special value \"BUILTIN\" for the embedded list."`
+	Jumper               JumperConfig               `comment:"Configuration for optional NodeInfo-based direct peering. When enabled,\nYggdrasil watches routed traffic, fetches the remote node's NodeInfo,\nand tries explicitly published jumper addresses as direct peer links.\nIt does not perform NAT traversal."`
 	TunType              string                     `comment:"TUN implementation to attach at startup. Supported values are\n\"native\", \"sockstun\", \"outproxy\" and \"none\". \"native\" creates an OS\nTUN device. \"sockstun\" creates a VTun netstack and exposes it through a\nlocal SOCKS server. \"outproxy\" creates a VTun netstack, listens for\nSOCKS clients inside Yggdrasil, and proxies them to the outer network."`
 	IfName               string                     `comment:"Local network interface name for TUN adapter, or \"auto\" to select\nan interface automatically, or \"none\" to run without TUN."`
 	IfMTU                uint64                     `comment:"Maximum Transmission Unit (MTU) size for your local TUN interface.\nDefault is the largest supported size for your platform. The lowest\npossible value is 1280."`
@@ -78,6 +79,13 @@ type AutoPeerConfig struct {
 	MinimumConnectedFromFetch int      `comment:"Minimum number of connected peers whose URIs are present in the\nfiltered autopeer source set before autopeering remains idle."`
 	Countries                 []string `comment:"Optional country filters for peer selection, matched case-insensitively\nagainst public-peer metadata."`
 	TransportSchemes          []string `comment:"Transport scheme filters for peer selection, e.g. [\"tcp\", \"tls\"].\nAutopeering stays idle unless both this and Countries are configured."`
+}
+
+type JumperConfig struct {
+	Enabled       bool     `comment:"Enable NodeInfo-based direct peering."`
+	Addresses     []string `comment:"Public peering addresses to publish in NodeInfo for other jumper nodes, for example [\"tls://example.net:12345\"]. These must be reachable by remote nodes; jumper does not perform NAT traversal."`
+	CheckInterval string   `comment:"How often queued jumper targets and owned link cleanup should be checked. Uses Go duration syntax such as \"10s\"."`
+	LinkTimeout   string   `comment:"How long a jumper-added link may remain disconnected before jumper removes it and tries another published address. Uses Go duration syntax such as \"30s\"."`
 }
 
 type TransportConfig struct {
@@ -142,6 +150,11 @@ func GenerateConfig() *NodeConfig {
 		FetchInterval: "1h",
 		CheckInterval: "1m",
 	}
+	cfg.Jumper = JumperConfig{
+		Addresses:     []string{},
+		CheckInterval: "10s",
+		LinkTimeout:   "30s",
+	}
 	cfg.MulticastInterfaces = defaults.DefaultMulticastInterfaces
 	cfg.TunType = "native"
 	cfg.IfName = defaults.DefaultIfName
@@ -199,6 +212,9 @@ func (cfg *NodeConfig) UnmarshalHJSON(b []byte) error {
 func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.Transport.normalize()
 	if err := cfg.AutoPeer.normalize(); err != nil {
+		return err
+	}
+	if err := cfg.Jumper.normalize(); err != nil {
 		return err
 	}
 	cfg.TunType = NormalizeTunType(cfg.TunType)
@@ -373,6 +389,26 @@ func (cfg *AutoPeerConfig) normalize() error {
 	}
 	if _, err := time.ParseDuration(cfg.CheckInterval); err != nil {
 		return fmt.Errorf("invalid AutoPeer.CheckInterval: %w", err)
+	}
+
+	return nil
+}
+
+func (cfg *JumperConfig) normalize() error {
+	cfg.Addresses = normalizeStringSlice(cfg.Addresses)
+
+	if strings.TrimSpace(cfg.CheckInterval) == "" {
+		cfg.CheckInterval = "10s"
+	}
+	if _, err := time.ParseDuration(cfg.CheckInterval); err != nil {
+		return fmt.Errorf("invalid Jumper.CheckInterval: %w", err)
+	}
+
+	if strings.TrimSpace(cfg.LinkTimeout) == "" {
+		cfg.LinkTimeout = "30s"
+	}
+	if _, err := time.ParseDuration(cfg.LinkTimeout); err != nil {
+		return fmt.Errorf("invalid Jumper.LinkTimeout: %w", err)
 	}
 
 	return nil

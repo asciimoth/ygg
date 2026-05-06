@@ -14,6 +14,7 @@ import (
 
 	"github.com/asciimoth/ygg/ygglib/address"
 	"github.com/asciimoth/ygg/ygglib/autopeer"
+	"github.com/asciimoth/ygg/ygglib/jumper"
 	"github.com/asciimoth/ygg/ygglib/multicast"
 	"github.com/asciimoth/ygg/ygglib/tun"
 )
@@ -66,6 +67,21 @@ type SetAutoPeerRequest struct {
 
 type RefreshAutoPeerRequest struct {
 	Source string `json:"source,omitempty"`
+}
+
+type GetJumperResponse struct {
+	Enabled       bool     `json:"enabled"`
+	Active        bool     `json:"active"`
+	Addresses     []string `json:"addresses"`
+	CheckInterval string   `json:"check_interval"`
+	LinkTimeout   string   `json:"link_timeout"`
+}
+
+type SetJumperRequest struct {
+	Enabled       string `json:"enabled,omitempty"`
+	Addresses     string `json:"addresses,omitempty"`
+	CheckInterval string `json:"check_interval,omitempty"`
+	LinkTimeout   string `json:"link_timeout,omitempty"`
 }
 
 type AutoPeerController struct {
@@ -265,6 +281,182 @@ func (a *AdminSocket) SetupAutoPeerHandlers(c *AutoPeerController) {
 			return c.Snapshot(), nil
 		},
 	)
+}
+
+type JumperNodeInfoController interface {
+	SetNodeInfo(map[string]interface{}, bool) error
+}
+
+type JumperController struct {
+	mu              sync.RWMutex
+	manager         *jumper.Manager
+	nodeInfoUpdater JumperNodeInfoController
+	nodeInfo        map[string]interface{}
+	nodeInfoPrivacy bool
+	enabled         bool
+	addresses       []string
+}
+
+func NewJumperController(
+	manager *jumper.Manager,
+	nodeInfoUpdater JumperNodeInfoController,
+	nodeInfo map[string]interface{},
+	nodeInfoPrivacy bool,
+	enabled bool,
+	addresses []string,
+) *JumperController {
+	if manager == nil {
+		return nil
+	}
+	return &JumperController{
+		manager:         manager,
+		nodeInfoUpdater: nodeInfoUpdater,
+		nodeInfo:        cloneNodeInfo(nodeInfo),
+		nodeInfoPrivacy: nodeInfoPrivacy,
+		enabled:         enabled,
+		addresses:       splitAdminCSV(strings.Join(addresses, ",")),
+	}
+}
+
+func (c *JumperController) Enabled() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.enabled
+}
+
+func (c *JumperController) Snapshot() *GetJumperResponse {
+	if c == nil || c.manager == nil {
+		return nil
+	}
+	cfg := c.manager.Config()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return &GetJumperResponse{
+		Enabled:       c.enabled,
+		Active:        c.manager.IsStarted(),
+		Addresses:     append([]string(nil), c.addresses...),
+		CheckInterval: cfg.CheckInterval.String(),
+		LinkTimeout:   cfg.LinkTimeout.String(),
+	}
+}
+
+func (c *JumperController) Apply(req *SetJumperRequest) error {
+	if c == nil || c.manager == nil {
+		return fmt.Errorf("jumper controller not configured")
+	}
+
+	cfg := c.manager.Config()
+	if req.CheckInterval != "" {
+		d, err := time.ParseDuration(req.CheckInterval)
+		if err != nil {
+			return fmt.Errorf("invalid check_interval: %w", err)
+		}
+		cfg.CheckInterval = d
+	}
+	if req.LinkTimeout != "" {
+		d, err := time.ParseDuration(req.LinkTimeout)
+		if err != nil {
+			return fmt.Errorf("invalid link_timeout: %w", err)
+		}
+		cfg.LinkTimeout = d
+	}
+	c.manager.SetConfig(cfg)
+
+	c.mu.Lock()
+	if req.Addresses != "" {
+		c.addresses = splitAdminCSV(req.Addresses)
+		if err := c.applyNodeInfoLocked(); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+	}
+	if req.Enabled != "" {
+		enabled, err := strconv.ParseBool(req.Enabled)
+		if err != nil {
+			c.mu.Unlock()
+			return fmt.Errorf("invalid enabled: %w", err)
+		}
+		c.enabled = enabled
+		if err := c.applyNodeInfoLocked(); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+		c.mu.Unlock()
+
+		if enabled {
+			c.manager.Start()
+		} else if err := c.manager.Stop(); err != nil {
+			return err
+		}
+		return nil
+	}
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *JumperController) applyNodeInfoLocked() error {
+	if c.nodeInfoUpdater == nil {
+		return nil
+	}
+	info := mergeJumperNodeInfo(c.nodeInfo, c.enabled, c.addresses)
+	if err := c.nodeInfoUpdater.SetNodeInfo(info, c.nodeInfoPrivacy); err != nil {
+		return fmt.Errorf("set nodeinfo: %w", err)
+	}
+	return nil
+}
+
+func (a *AdminSocket) SetupJumperHandlers(c *JumperController) {
+	if c == nil {
+		return
+	}
+	_ = a.AddHandler(
+		"getJumper", "Show jumper configuration and state", []string{},
+		func(_ json.RawMessage) (interface{}, error) {
+			res := c.Snapshot()
+			if res == nil {
+				return nil, fmt.Errorf("jumper controller not configured")
+			}
+			return res, nil
+		},
+	)
+	_ = a.AddHandler(
+		"setJumper", "Update runtime jumper configuration", []string{
+			"enabled", "addresses", "check_interval", "link_timeout",
+		},
+		func(in json.RawMessage) (interface{}, error) {
+			req := &SetJumperRequest{}
+			if err := json.Unmarshal(in, req); err != nil {
+				return nil, err
+			}
+			if err := c.Apply(req); err != nil {
+				return nil, err
+			}
+			return c.Snapshot(), nil
+		},
+	)
+}
+
+func cloneNodeInfo(in map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func mergeJumperNodeInfo(base map[string]interface{}, enabled bool, addresses []string) map[string]interface{} {
+	merged := cloneNodeInfo(base)
+	delete(merged, jumper.NodeInfoKey)
+	if enabled {
+		for key, value := range jumper.AdvertisedNodeInfo(addresses) {
+			merged[key] = value
+		}
+	}
+	return merged
 }
 
 func (a *AdminSocket) SetupMulticastHandlers(m *multicast.Multicast) {

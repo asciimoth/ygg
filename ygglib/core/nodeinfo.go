@@ -134,6 +134,10 @@ func (c *Core) GetNodeInfo(key string) (json.RawMessage, error) {
 	return c.proto.nodeinfo.getNodeInfo(key)
 }
 
+func (c *Core) SetNodeInfo(given map[string]interface{}, privacy bool) error {
+	return c.proto.nodeinfo.setNodeInfo(given, privacy)
+}
+
 func (m *nodeinfo) getNodeInfo(keyHex string) (json.RawMessage, error) {
 	if keyHex == "" {
 		return nil, fmt.Errorf("no remote public key supplied")

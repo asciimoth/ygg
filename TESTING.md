@@ -1,10 +1,11 @@
 # Testing
 
-This repository has three main test layers:
+This repository has several main test layers:
 
 - Fast package tests with `go test ./ygglib/... ./yggd/... ./examples/... --race`
 - A Linux Docker compatibility suite that runs this fork against pinned upstream `yggdrasil-go`
 - A Linux Docker public-autopeering suite that validates runtime autopeer setup through the admin API
+- A Linux Docker jumper suite that validates NodeInfo-based direct peering over an indirect route
 - A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
 - A Linux Docker sockstun suite that validates VTun-backed local SOCKS proxying and runtime TUN swaps
 
@@ -88,6 +89,66 @@ Each run captures:
 - `yggdrasilctl -json getSelf`
 - `yggdrasilctl -json getPeers`
 - `yggdrasilctl -json getTun`
+
+Containers, Docker network, and temporary Docker images are removed during cleanup.
+
+## Docker Jumper Suite
+
+Run the Docker jumper suite with:
+
+```bash
+just test-jumper
+```
+
+This target also uses `sudo` because it needs Docker access and privileged containers.
+
+### What It Tests
+
+The Docker jumper suite validates that:
+
+- Three daemons built from this repository can form an indirect relay topology
+- Jumper can be enabled and configured at runtime through `yggdrasilctl setJumper`
+- Node B publishes an explicit jumper address in NodeInfo
+- Traffic from Node A to Node B first succeeds through the relay path
+- Node A fetches Node B's NodeInfo and adds Node B's published address as a direct peer
+
+### How It Works
+
+The runner is [tests/compat/run-jumper.sh](/home/moth/projects/ygg/tests/compat/run-jumper.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates fresh JSON configs for Node A, Node B, and a relay.
+3. Connects Node A and Node B only to the relay initially.
+4. Enables jumper on Node A and Node B through `setJumper`, with Node B publishing `tls://node-b:10031`.
+5. Sends `ping -6` traffic from Node A to Node B through the relay.
+6. Waits for Node A to report the published Node B URI as an additional direct peer.
+
+### Prerequisites
+
+The Docker jumper suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+
+### Artifacts
+
+Temporary logs and interface snapshots are written under:
+
+```text
+.tmp/compat-jumper/
+```
+
+Each run captures:
+
+- Container logs
+- `ip addr` and `ip route` snapshots
+- `yggdrasilctl -json getSelf`
+- `yggdrasilctl -json getPeers`
+- `yggdrasilctl -json getJumper`
+- `yggdrasilctl -json getNodeInfo`
 
 Containers, Docker network, and temporary Docker images are removed during cleanup.
 

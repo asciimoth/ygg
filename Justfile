@@ -35,6 +35,10 @@ test-compat:
 test-autopeer:
 	sudo ./tests/compat/run-autopeer.sh
 
+# Docker-based NodeInfo jumper test across an indirect relay path. Uses sudo.
+test-jumper:
+	sudo ./tests/compat/run-jumper.sh
+
 # Docker-based transport-manager control test between two local daemons. Uses sudo.
 test-transport:
 	sudo ./tests/compat/run-transport.sh
@@ -43,4 +47,4 @@ test-transport:
 test-sockstun:
 	sudo ./tests/compat/run-sockstun.sh
 
-test-total: test test-compat test-autopeer test-transport test-sockstun
+test-total: test test-compat test-autopeer test-jumper test-transport test-sockstun
