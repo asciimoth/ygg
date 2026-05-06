@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/asciimoth/ygg/ygglib/config"
@@ -36,6 +39,31 @@ func TestNewTransportManagerAppliesDefaultAnonymousNetworkBlocks(t *testing.T) {
 		if network != nil {
 			t.Fatalf("expected default transport mapping %q to be nil, got %#v", pattern, network)
 		}
+	}
+}
+
+func TestTryWriteGeneratedConfigCreatesFileWithoutOverwrite(t *testing.T) {
+	cfg := config.GenerateConfig()
+	configPath := filepath.Join(t.TempDir(), "nested", "yggd.conf")
+
+	tryWriteGeneratedConfig(configPath, cfg)
+
+	first, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(first), "PrivateKeyPath") || !strings.Contains(string(first), "AdminListen") {
+		t.Fatalf("generated config missing expected fields:\n%s", first)
+	}
+
+	tryWriteGeneratedConfig(configPath, config.GenerateConfig())
+
+	second, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile after second write: %v", err)
+	}
+	if string(first) != string(second) {
+		t.Fatal("expected existing generated config to be left untouched")
 	}
 }
 

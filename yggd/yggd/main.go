@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -176,7 +177,6 @@ func main() {
 		_ = f.Close()
 
 	case *genconf:
-		cfg.AdminListen = ""
 		var bs []byte
 		if *confjson {
 			bs, err = json.MarshalIndent(cfg, "", "  ")
@@ -190,6 +190,13 @@ func main() {
 		return
 
 	default:
+		if !*getaddr && !*getsnet && !*getpkey {
+			if err := readOrGenerateDefaultConfig(cfg); err != nil {
+				panic(err)
+			}
+			break
+		}
+
 		fmt.Println("Usage:")
 		flag.PrintDefaults()
 
@@ -502,6 +509,44 @@ func main() {
 
 func isPermissionError(err error) bool {
 	return os.IsPermission(err) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+func readOrGenerateDefaultConfig(cfg *config.NodeConfig) error {
+	configPath := config.GetDefaults().DefaultConfigFile
+	if strings.TrimSpace(configPath) == "" {
+		return nil
+	}
+
+	f, err := os.Open(configPath)
+	if err == nil {
+		defer f.Close()
+		_, err = cfg.ReadFrom(f)
+		return err
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	tryWriteGeneratedConfig(configPath, cfg)
+	return nil
+}
+
+func tryWriteGeneratedConfig(configPath string, cfg *config.NodeConfig) {
+	bs, err := hjson.Marshal(cfg)
+	if err != nil {
+		return
+	}
+	if dir := filepath.Dir(configPath); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return
+		}
+	}
+	f, err := os.OpenFile(configPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.Write(append(bs, '\n'))
 }
 
 func mergeNodeInfo(base map[string]interface{}, overlay map[string]interface{}) map[string]interface{} {
