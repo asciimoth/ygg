@@ -14,6 +14,7 @@ func TestEffectiveAdminListenUsesUnprivilegedDefaultWithoutNativeTun(t *testing.
 		{name: "dummy", tunType: "dummy", ifName: "auto"},
 		{name: "sockstun", tunType: "sockstun", ifName: "auto"},
 		{name: "socks alias", tunType: "socks", ifName: "auto"},
+		{name: "outproxy", tunType: "outproxy", ifName: "auto"},
 		{name: "legacy ifname none", tunType: "native", ifName: "none"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

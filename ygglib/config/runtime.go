@@ -11,6 +11,8 @@ func NormalizeTunType(tunType string) string {
 		return "native"
 	case "socks", "vtun+socks":
 		return "sockstun"
+	case "socks+vtun":
+		return "outproxy"
 	case "dummy":
 		return "none"
 	default:

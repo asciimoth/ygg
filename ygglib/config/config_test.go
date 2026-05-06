@@ -147,6 +147,23 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 	}
 }
 
+func TestConfigTunTypeOutproxy(t *testing.T) {
+	cfg := GenerateConfig()
+	const raw = `{
+		TunType: outproxy
+		IfName: "auto"
+	}`
+	if err := cfg.UnmarshalHJSON([]byte(raw)); err != nil {
+		t.Fatalf("unmarshal outproxy config: %v", err)
+	}
+	if cfg.TunType != "outproxy" {
+		t.Fatalf("unexpected tun type %q", cfg.TunType)
+	}
+	if cfg.StartupTunNeedsPrivileges() {
+		t.Fatal("outproxy should not require native TUN privileges")
+	}
+}
+
 func TestExampleConfigIncludesAutoPeer(t *testing.T) {
 	examplePath := filepath.Join("..", "..", "example.conf")
 	f, err := os.Open(examplePath)

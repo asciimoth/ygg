@@ -38,6 +38,7 @@ import (
 	"github.com/asciimoth/ygg/ygglib/ipv6rwc"
 	"github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/multicast"
+	"github.com/asciimoth/ygg/ygglib/outproxy"
 	"github.com/asciimoth/ygg/ygglib/sockstun"
 	"github.com/asciimoth/ygg/ygglib/transport"
 	"github.com/asciimoth/ygg/ygglib/transportcfg"
@@ -59,7 +60,14 @@ type daemonTunController struct {
 	cfg         *config.NodeConfig
 	log         core.Logger
 	mu          sync.RWMutex
-	activeSocks *sockstun.Tun
+	activeSocks socksTun
+}
+
+type socksTun interface {
+	Network() gonnect.Network
+	SetProxies([]sockstun.ProxyConfig, string) error
+	Proxies() []sockstun.ProxyConfig
+	DefaultProxyURL() string
 }
 
 type multicastCoreAdapter struct {
@@ -521,7 +529,7 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 	}
 
 	var device gtun.Tun
-	var activeSocks *sockstun.Tun
+	var activeSocks socksTun
 	var err error
 
 	switch typ {
@@ -573,6 +581,46 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 			Proxies:         proxies,
 			DefaultProxyURL: defaultProxyURL,
 			DNS:             dns,
+			Log:             c.log,
+		})
+		if err != nil {
+			return err
+		}
+		device = st
+		activeSocks = st
+	case "outproxy":
+		mwo := c.cfg.TunMWO
+		if parsed, ok, err := parseOptionalInt(req.MWO); err != nil {
+			return fmt.Errorf("mwo: %w", err)
+		} else if ok {
+			mwo = parsed
+		}
+		mro := c.cfg.TunMRO
+		if parsed, ok, err := parseOptionalInt(req.MRO); err != nil {
+			return fmt.Errorf("mro: %w", err)
+		} else if ok {
+			mro = parsed
+		}
+		listen := strings.TrimSpace(req.SocksListen)
+		if listen == "" {
+			listen = c.cfg.TunSocksListen
+		}
+		if name == "" || name == "auto" {
+			name = outproxy.DefaultName
+		}
+		proxies, defaultProxyURL, err := parseOptionalSocksRouting(req.SocksProxies, req.SocksDefaultProxy, c.cfg.TunSocksProxies, c.cfg.TunSocksDefaultProxy)
+		if err != nil {
+			return err
+		}
+		st, err := outproxy.Create(outproxy.Config{
+			Name:            name,
+			Listen:          listen,
+			Address:         c.node.core.Address(),
+			MTU:             mtu,
+			MWO:             mwo,
+			MRO:             mro,
+			Proxies:         proxies,
+			DefaultProxyURL: defaultProxyURL,
 			Log:             c.log,
 		})
 		if err != nil {
@@ -651,7 +699,14 @@ func (c *daemonTunController) GetSocksDNS() admin.TunSocksDNSConfig {
 			NoResolveZones: append([]string{}, c.cfg.TunSocksNoResolve...),
 		}
 	}
-	dns := active.DNS()
+	sock, ok := active.(*sockstun.Tun)
+	if !ok {
+		return admin.TunSocksDNSConfig{
+			FallbackServer: c.cfg.TunSocksDNSFallback,
+			NoResolveZones: append([]string{}, c.cfg.TunSocksNoResolve...),
+		}
+	}
+	dns := sock.DNS()
 	return admin.TunSocksDNSConfig{
 		FallbackServer: dns.FallbackServer,
 		NoResolveZones: dns.NoResolveZones,
@@ -666,18 +721,31 @@ func (c *daemonTunController) SetSocksDNS(cfg admin.TunSocksDNSConfig) error {
 	c.mu.RLock()
 	active := c.activeSocks
 	c.mu.RUnlock()
+	if active == nil && config.NormalizeTunType(c.cfg.TunType) == "outproxy" && (dns.FallbackServer != "" || len(dns.NoResolveZones) > 0) {
+		return fmt.Errorf("tun type outproxy does not support sockstun DNS resolution settings")
+	}
 	if active != nil {
-		if err := active.SetDNS(dns); err != nil {
-			return err
+		sock, ok := active.(*sockstun.Tun)
+		if ok {
+			if err := sock.SetDNS(dns); err != nil {
+				return err
+			}
+			dns = sock.DNS()
+		} else if dns.FallbackServer != "" || len(dns.NoResolveZones) > 0 {
+			return fmt.Errorf("tun type outproxy does not support sockstun DNS resolution settings")
 		}
-		dns = active.DNS()
+		if !ok {
+			c.cfg.TunSocksDNSFallback = dns.FallbackServer
+			c.cfg.TunSocksNoResolve = dns.NoResolveZones
+			return nil
+		}
 	}
 	c.cfg.TunSocksDNSFallback = dns.FallbackServer
 	c.cfg.TunSocksNoResolve = dns.NoResolveZones
 	return nil
 }
 
-func (c *daemonTunController) setActiveSocks(active *sockstun.Tun) {
+func (c *daemonTunController) setActiveSocks(active socksTun) {
 	c.mu.Lock()
 	c.activeSocks = active
 	c.mu.Unlock()

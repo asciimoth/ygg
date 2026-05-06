@@ -26,6 +26,8 @@ At runtime, the system is composed as:
    daemon.
 11. `sockstun` provides a VTun-backed local SOCKS TUN implementation for the
     daemon.
+12. `outproxy` provides a VTun-backed Yggdrasil-hosted SOCKS outproxy
+    implementation for the daemon.
 
 `yggd/yggd` is the composition root. It wires the packages together but
 keeps most behavior inside `ygglib/`.
@@ -72,7 +74,8 @@ Main types:
 Runtime use:
 - `core.Logger` and package-local logger aliases resolve to
   `logger.Logger`, so callers pass one logging contract through `core`,
-  `admin`, `autopeer`, `multicast`, `tun`, `sockstun`, and `tunnative`.
+  `admin`, `autopeer`, `multicast`, `tun`, `sockstun`, `outproxy`, and
+  `tunnative`.
 - `logger.StdLogger` wraps Go's `log` package, supports error/warn/info/debug
   filtering, and is safe for concurrent use.
 - `logger.Discard()` provides the default no-op logger for library code when a
@@ -438,6 +441,30 @@ Behavior:
 - Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
   listener and VTun when detached or replaced.
 
+### `outproxy`
+
+Purpose:
+- Create a VTun-backed userspace TUN implementation.
+- Expose a SOCKS server on the node's Yggdrasil address.
+- Proxy SOCKS traffic from Yggdrasil clients to the outer network.
+
+Main API:
+- `outproxy.Create(outproxy.Config) (*outproxy.Tun, error)`
+
+Behavior:
+- Builds a `github.com/asciimoth/gonnect-netstack/vtun.VTun` with the node's
+  Yggdrasil IPv6 address as the local address.
+- Listens on VTun instead of the local OS network. When `TunSocksListen` uses a
+  loopback or unspecified host, outproxy keeps the port and binds to the node's
+  Yggdrasil address.
+- Uses `gonnect/native` as the default outbound network.
+- Supports the same `TunSocksProxies` and `TunSocksDefaultProxy` route controls
+  as sockstun, but outbound proxy connections are made through the outer
+  network. Outproxy deliberately does not run sockstun's mnlib/fallback DNS
+  resolution pipeline.
+- Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
+  listener and VTun when detached or replaced.
+
 ### `ygglib/address`
 
 Purpose:
@@ -462,7 +489,7 @@ The daemon is intentionally small. Its job is to:
 - optionally attach `multicast`
 - register admin adapters for `multicast` when enabled
 - create native TUNs through `tunnative` or SOCKS-backed VTuns through
-  `sockstun` when configured
+  `sockstun`/`outproxy` when configured
 - attach `tun` using `ipv6rwc.NewReadWriteCloser(core)`
 - register admin adapters for `tun`, including runtime attach/detach/replace
   commands
@@ -504,11 +531,12 @@ options:
 
 TUN type selection and implementation-specific parameters from config are
 interpreted in `yggd/yggd`, not inside `ygglib/tun`. Native TUN setup is
-delegated to `tunnative`; SOCKS-backed VTun setup is delegated to `sockstun`.
+delegated to `tunnative`; SOCKS-backed VTun setup is delegated to `sockstun`
+and `outproxy`.
 When `LocalDNSListen` is configured, `yggd/yggd` also owns the local DNS
 server lifecycle. That server answers only `IN A` and `IN AAAA` queries through
-`mnlib.Resolver`; when sockstun is active it uses sockstun's route network, and
-otherwise it uses the native network.
+`mnlib.Resolver`; when sockstun or outproxy is active it uses the active TUN
+SOCKS route network, and otherwise it uses the native network.
 
 This keeps parsing concerns out of runtime packages.
 
@@ -548,8 +576,8 @@ Below that boundary, the active runtime attachment depends only on
 implementations to share one lifecycle and packet path.
 
 In the default daemon, attachments are created one layer above this via
-`tunnative.Create(...)` or `sockstun.Create(...)` and then explicitly attached
-to `tun.TunAdapter`.
+`tunnative.Create(...)`, `sockstun.Create(...)` or `outproxy.Create(...)` and
+then explicitly attached to `tun.TunAdapter`.
 
 ### 5. Local control API
 
@@ -563,13 +591,13 @@ Runtime wiring is owned by `yggd/yggd`:
 
 The TUN admin adapter exposes `getTun` and, when a daemon controller is wired
 in, `attachTun`, `replaceTun`, and `detachTun`. `attachTun`/`replaceTun` accept
-the same implementation type names as config (`native`, `sockstun`, `none`)
-plus implementation options such as `socks_listen`, `socks_proxies`,
+the same implementation type names as config (`native`, `sockstun`, `outproxy`,
+`none`) plus implementation options such as `socks_listen`, `socks_proxies`,
 `socks_default_proxy`, `socks_dns_fallback`, `socks_no_resolve`, `mtu`, `mwo`,
-and `mro`. When the controller supports sockstun proxy routing, admin also
+and `mro`. When the controller supports TUN SOCKS proxy routing, admin also
 exposes `getTunSocksProxies` and `setTunSocksProxies` for runtime filter and
 fallback proxy updates. Sockstun DNS settings are exposed as `getTunSocksDNS`
-and `setTunSocksDNS`.
+and `setTunSocksDNS`; outproxy rejects non-empty DNS routing settings.
 
 This keeps admin transport and adapter glue centralized while leaving business
 logic distributed in packages that do not depend on the admin API.

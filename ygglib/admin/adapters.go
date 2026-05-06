@@ -392,7 +392,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 	)
 	if proxyController, ok := controller.(TunSocksProxyController); ok {
 		_ = a.AddHandler(
-			"getTunSocksProxies", "Show sockstun second-hop SOCKS proxy routing", []string{},
+			"getTunSocksProxies", "Show TUN SOCKS proxy routing", []string{},
 			func(_ json.RawMessage) (interface{}, error) {
 				routing := proxyController.GetSocksProxies()
 				return GetTunSocksProxiesResponse{
@@ -402,7 +402,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 			},
 		)
 		_ = a.AddHandler(
-			"setTunSocksProxies", "Replace sockstun second-hop SOCKS proxy routing", []string{"proxies", "default_proxy_url"},
+			"setTunSocksProxies", "Replace TUN SOCKS proxy routing", []string{"proxies", "default_proxy_url"},
 			func(in json.RawMessage) (interface{}, error) {
 				req := SetTunSocksProxiesRequest{}
 				if err := json.Unmarshal(in, &req); err != nil {
