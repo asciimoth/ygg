@@ -10,7 +10,7 @@ func getDefaults() platformDefaultParameters {
 		DefaultAdminListen: "tcp://localhost:9001",
 
 		// Configuration (used for yggdrasilctl)
-		DefaultConfigFile: "/etc/yggdrasil.conf",
+		DefaultConfigFile: "/etc/yggd.conf",
 
 		// Multicast interfaces
 		DefaultMulticastInterfaces: []MulticastInterfaceConfig{
