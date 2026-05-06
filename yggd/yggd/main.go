@@ -29,6 +29,7 @@ import (
 
 	"github.com/asciimoth/gonnect"
 	gtun "github.com/asciimoth/gonnect/tun"
+	"github.com/asciimoth/ygg/yggd/linktransport"
 	"github.com/asciimoth/ygg/yggd/tunnative"
 	"github.com/asciimoth/ygg/ygglib/address"
 	"github.com/asciimoth/ygg/ygglib/admin"
@@ -480,6 +481,16 @@ func newTransportManager(cfg *config.NodeConfig) (*transport.Manager, transport.
 	}
 	if err := manager.RegisterTransport(transport.NewTLSTransport(tlsConfig.Clone())); err != nil {
 		return nil, nil, err
+	}
+	for _, t := range []transport.Transport{
+		linktransport.NewUNIXTransport(),
+		linktransport.NewWebSocketTransport(),
+		linktransport.NewSecureWebSocketTransport(tlsConfig.Clone()),
+		linktransport.NewQUICTransport(tlsConfig.Clone()),
+	} {
+		if err := manager.RegisterTransport(t); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	for pattern, networkCfg := range cfg.Transport.NetworkMappings {

@@ -15,12 +15,13 @@ UPSTREAM_CONT="${RUN_ID}-upstream"
 LOCAL_LISTEN_PORT="${LOCAL_LISTEN_PORT:-10001}"
 UPSTREAM_LISTEN_PORT="${UPSTREAM_LISTEN_PORT:-10002}"
 ADMIN_ENDPOINT="unix:///var/run/yggdrasil.sock"
-YGG_UPSTREAM_REF="${YGG_UPSTREAM_REF:-b88fec63ff4eb94add47191fca292fc3306ee71c}"
+YGG_UPSTREAM_REF="${YGG_UPSTREAM_REF:-be5daeba7ad6b9eb3a30a3fa84e58d3962322dbd}"
 
 LOCAL_DIR="${TMP_DIR}/local"
 UPSTREAM_DIR="${TMP_DIR}/upstream"
+SHARED_DIR="${TMP_DIR}/shared"
 
-mkdir -p "${LOCAL_DIR}" "${UPSTREAM_DIR}"
+mkdir -p "${LOCAL_DIR}" "${UPSTREAM_DIR}" "${SHARED_DIR}"
 
 log() {
 	printf '==> %s\n' "$*" >&2
@@ -146,18 +147,18 @@ wait_for_ping_failure() {
 
 render_config() {
 	local image="$1"
-	local listen_port="$2"
+	local listen_uris="$2"
 
 	docker run --rm \
 		-e ADMIN_ENDPOINT="${ADMIN_ENDPOINT}" \
-		-e LISTEN_URI="tls://0.0.0.0:${listen_port}" \
+		-e LISTEN_URIS="${listen_uris}" \
 		"${image}" \
 		sh -ceu '
 			yggdrasil -genconf -json \
-				| jq --arg admin "${ADMIN_ENDPOINT}" --arg listen "${LISTEN_URI}" \
+				| jq --arg admin "${ADMIN_ENDPOINT}" --argjson listen "${LISTEN_URIS}" \
 					'"'"'.AdminListen = $admin
 					| .IfName = "auto"
-					| .Listen = [$listen]
+					| .Listen = $listen
 					| .Peers = []
 					| .InterfacePeers = {}
 					| .MulticastInterfaces = []'"'"'
@@ -176,6 +177,7 @@ start_container() {
 		--network-alias "${name}" \
 		--privileged \
 		-v "${dir}:/config" \
+		-v "${SHARED_DIR}:/shared" \
 		"${image}" \
 		yggdrasil -useconffile /config/ygg.json -logto stdout -loglevel debug
 }
@@ -214,8 +216,10 @@ run docker build \
 	"${ROOT_DIR}"
 
 log "rendering compatibility configs"
-render_config "${LOCAL_IMAGE}" "${LOCAL_LISTEN_PORT}" >"${LOCAL_DIR}/ygg.json"
-render_config "${UPSTREAM_IMAGE}" "${UPSTREAM_LISTEN_PORT}" >"${UPSTREAM_DIR}/ygg.json"
+LOCAL_LISTENS="[\"tcp://0.0.0.0:${LOCAL_LISTEN_PORT}\",\"tls://0.0.0.0:$((LOCAL_LISTEN_PORT + 10))\",\"ws://0.0.0.0:$((LOCAL_LISTEN_PORT + 20))\",\"quic://0.0.0.0:$((LOCAL_LISTEN_PORT + 30))\",\"unix:///shared/local.sock\"]"
+UPSTREAM_LISTENS="[\"tcp://0.0.0.0:${UPSTREAM_LISTEN_PORT}\",\"tls://0.0.0.0:$((UPSTREAM_LISTEN_PORT + 10))\",\"ws://0.0.0.0:$((UPSTREAM_LISTEN_PORT + 20))\",\"quic://0.0.0.0:$((UPSTREAM_LISTEN_PORT + 30))\",\"unix:///shared/upstream.sock\"]"
+render_config "${LOCAL_IMAGE}" "${LOCAL_LISTENS}" >"${LOCAL_DIR}/ygg.json"
+render_config "${UPSTREAM_IMAGE}" "${UPSTREAM_LISTENS}" >"${UPSTREAM_DIR}/ygg.json"
 
 run docker network create "${NETWORK_NAME}"
 start_container "${LOCAL_CONT}" "${LOCAL_IMAGE}" "${LOCAL_DIR}"
@@ -228,37 +232,55 @@ LOCAL_OUTER_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddr
 UPSTREAM_OUTER_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${UPSTREAM_CONT}")"
 LOCAL_ADDR="$(get_self_field "${LOCAL_CONT}" address)"
 UPSTREAM_ADDR="$(get_self_field "${UPSTREAM_CONT}" address)"
-LOCAL_URI="tls://${LOCAL_OUTER_IP}:${LOCAL_LISTEN_PORT}"
-UPSTREAM_URI="tls://${UPSTREAM_OUTER_IP}:${UPSTREAM_LISTEN_PORT}"
 
-log "scenario 1: this fork dials upstream"
-add_peer "${LOCAL_CONT}" "${UPSTREAM_URI}"
-wait_for_peer_count "${LOCAL_CONT}" 1
-wait_for_peer_count "${UPSTREAM_CONT}" 1
-wait_for_ping_success "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
-wait_for_ping_success "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
+declare -A LOCAL_URIS=(
+	[tcp]="tcp://${LOCAL_OUTER_IP}:${LOCAL_LISTEN_PORT}"
+	[tls]="tls://${LOCAL_OUTER_IP}:$((LOCAL_LISTEN_PORT + 10))"
+	[ws]="ws://${LOCAL_OUTER_IP}:$((LOCAL_LISTEN_PORT + 20))"
+	[quic]="quic://${LOCAL_OUTER_IP}:$((LOCAL_LISTEN_PORT + 30))"
+	[unix]="unix:///shared/local.sock"
+)
+declare -A UPSTREAM_URIS=(
+	[tcp]="tcp://${UPSTREAM_OUTER_IP}:${UPSTREAM_LISTEN_PORT}"
+	[tls]="tls://${UPSTREAM_OUTER_IP}:$((UPSTREAM_LISTEN_PORT + 10))"
+	[ws]="ws://${UPSTREAM_OUTER_IP}:$((UPSTREAM_LISTEN_PORT + 20))"
+	[quic]="quic://${UPSTREAM_OUTER_IP}:$((UPSTREAM_LISTEN_PORT + 30))"
+	[unix]="unix:///shared/upstream.sock"
+)
 
-log "scenario 2: remove outbound peer from this fork"
-remove_peer "${LOCAL_CONT}" "${UPSTREAM_URI}"
-wait_for_peer_count "${LOCAL_CONT}" 0
-wait_for_peer_count "${UPSTREAM_CONT}" 0
-wait_for_ping_failure "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
+for scheme in tcp tls ws quic unix; do
+	LOCAL_URI="${LOCAL_URIS[${scheme}]}"
+	UPSTREAM_URI="${UPSTREAM_URIS[${scheme}]}"
 
-log "scenario 3: upstream dials this fork"
-add_peer "${UPSTREAM_CONT}" "${LOCAL_URI}"
-wait_for_peer_count "${LOCAL_CONT}" 1
-wait_for_peer_count "${UPSTREAM_CONT}" 1
-wait_for_ping_success "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
-wait_for_ping_success "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
+	log "${scheme}: this fork dials upstream"
+	add_peer "${LOCAL_CONT}" "${UPSTREAM_URI}"
+	wait_for_peer_count "${LOCAL_CONT}" 1
+	wait_for_peer_count "${UPSTREAM_CONT}" 1
+	wait_for_ping_success "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
+	wait_for_ping_success "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
 
-log "scenario 4: remove outbound peer from upstream"
-remove_peer "${UPSTREAM_CONT}" "${LOCAL_URI}"
-wait_for_peer_count "${LOCAL_CONT}" 0
-wait_for_peer_count "${UPSTREAM_CONT}" 0
-wait_for_ping_failure "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
+	log "${scheme}: remove outbound peer from this fork"
+	remove_peer "${LOCAL_CONT}" "${UPSTREAM_URI}"
+	wait_for_peer_count "${LOCAL_CONT}" 0
+	wait_for_peer_count "${UPSTREAM_CONT}" 0
+	wait_for_ping_failure "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
 
-log "scenario 5: re-add peer from this fork after runtime mutation"
-add_peer "${LOCAL_CONT}" "${UPSTREAM_URI}"
+	log "${scheme}: upstream dials this fork"
+	add_peer "${UPSTREAM_CONT}" "${LOCAL_URI}"
+	wait_for_peer_count "${LOCAL_CONT}" 1
+	wait_for_peer_count "${UPSTREAM_CONT}" 1
+	wait_for_ping_success "${LOCAL_CONT}" "${UPSTREAM_ADDR}"
+	wait_for_ping_success "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
+
+	log "${scheme}: remove outbound peer from upstream"
+	remove_peer "${UPSTREAM_CONT}" "${LOCAL_URI}"
+	wait_for_peer_count "${LOCAL_CONT}" 0
+	wait_for_peer_count "${UPSTREAM_CONT}" 0
+	wait_for_ping_failure "${UPSTREAM_CONT}" "${LOCAL_ADDR}"
+done
+
+log "tls: re-add peer from this fork after runtime mutation"
+add_peer "${LOCAL_CONT}" "${UPSTREAM_URIS[tls]}"
 wait_for_peer_count "${LOCAL_CONT}" 1
 wait_for_peer_count "${UPSTREAM_CONT}" 1
 wait_for_ping_success "${LOCAL_CONT}" "${UPSTREAM_ADDR}"

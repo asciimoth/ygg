@@ -130,14 +130,18 @@ Responsibilities:
 creation is delegated to the injected `transport.Manager`.
 
 Currently supported carrier families are only those provided by the configured
-manager. In this repository today, the maintained built-in transports are:
-- TCP
-- TLS
+manager. The reusable `ygglib/transport` package keeps only the generic manager
+plus TCP and TLS implementations. The daemon registers additional
+`transport.Transport` implementations during node setup for:
+- UNIX sockets
+- WebSocket (`ws`)
+- Secure WebSocket (`wss`) outbound dialing, intended for peers behind a reverse
+  proxy
+- QUIC
 
-Former in-core carrier implementations for UNIX sockets, SOCKS, QUIC,
-WebSocket, and secure WebSocket have been removed. If those schemes are needed
-again, they should come back as `transport.Transport` implementations rather
-than as `core`-owned dialers/listeners.
+`socks` and `sockstls` remain compatibility aliases that are normalized by
+`core` onto the TCP/TLS transport-manager path rather than implemented as
+separate daemon transports.
 
 The transport manager is responsible for turning a registered scheme into a
 reliable ordered `net.Conn` or `net.Listener`. Once a connection is

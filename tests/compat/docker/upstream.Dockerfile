@@ -1,6 +1,6 @@
 FROM golang:1.25.5-bookworm AS build
 
-ARG YGG_UPSTREAM_REF=b88fec63ff4eb94add47191fca292fc3306ee71c
+ARG YGG_UPSTREAM_REF=be5daeba7ad6b9eb3a30a3fa84e58d3962322dbd
 
 WORKDIR /src/upstream
 

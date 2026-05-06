@@ -39,10 +39,15 @@ The compatibility suite validates interoperability between:
 
 It covers:
 
-- Outbound peering from this fork to upstream
-- Outbound peering from upstream to this fork
+- Outbound peering from this fork to upstream over `tcp`, `tls`, `ws`, `quic`
+  and `unix`
+- Outbound peering from upstream to this fork over `tcp`, `tls`, `ws`, `quic`
+  and `unix`
 - Runtime peer removal and re-addition through `yggdrasilctl`
 - End-to-end IPv6 reachability over the Yggdrasil TUN interfaces
+
+The suite deliberately skips `wss` because a meaningful compatibility case
+requires a TLS-terminating WebSocket reverse proxy in front of the listener.
 
 ### How It Works
 

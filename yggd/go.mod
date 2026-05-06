@@ -7,11 +7,13 @@ require (
 	github.com/asciimoth/mnlib v0.2.0
 	github.com/asciimoth/tuntap v0.3.1
 	github.com/asciimoth/ygg/ygglib v0.0.0
+	github.com/coder/websocket v1.8.14
 	github.com/hashicorp/go-syslog v1.0.0
 	github.com/hjson/hjson-go/v4 v4.6.0
 	github.com/kardianos/minwinsvc v1.0.2
 	github.com/miekg/dns v1.1.72
 	github.com/olekukonko/tablewriter v1.1.3
+	github.com/quic-go/quic-go v0.59.0
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.34.0
@@ -32,7 +34,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
