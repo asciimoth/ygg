@@ -387,6 +387,9 @@ func main() {
 				SocksDefaultProxy: cfg.TunSocksDefaultProxy,
 				SocksDNSFallback:  cfg.TunSocksDNSFallback,
 				SocksNoResolve:    mustMarshalStrings(cfg.TunSocksNoResolve),
+				SocksTLSMITMCA:    cfg.TunSocksTLSMITM.CAFile,
+				SocksTLSMITMKey:   cfg.TunSocksTLSMITM.KeyFile,
+				SocksTLSMITMHosts: mustMarshalStrings(cfg.TunSocksTLSMITM.Hostnames),
 				MWO:               fmt.Sprintf("%d", cfg.TunMWO),
 				MRO:               fmt.Sprintf("%d", cfg.TunMRO),
 			}, false); err != nil {
@@ -571,6 +574,10 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 		if err != nil {
 			return err
 		}
+		tlsMITM, err := parseOptionalSocksTLSMITM(req.SocksTLSMITMCA, req.SocksTLSMITMKey, req.SocksTLSMITMHosts, c.cfg.TunSocksTLSMITM)
+		if err != nil {
+			return err
+		}
 		st, err := sockstun.Create(sockstun.Config{
 			Name:            name,
 			Listen:          listen,
@@ -581,6 +588,7 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 			Proxies:         proxies,
 			DefaultProxyURL: defaultProxyURL,
 			DNS:             dns,
+			TLSMITM:         tlsMITM,
 			Log:             c.log,
 		})
 		if err != nil {
@@ -801,6 +809,24 @@ func parseOptionalSocksDNS(fallbackValue, noResolveValue, fallbackServer string,
 		return sockstun.DNSConfig{}, fmt.Errorf("socks_no_resolve: %w", err)
 	}
 	cfg.NoResolveZones = zones
+	return cfg, nil
+}
+
+func parseOptionalSocksTLSMITM(caValue, keyValue, hostsValue string, fallback config.TunSocksTLSMITMConfig) (sockstun.TLSMITMConfig, error) {
+	cfg := sockstun.TLSMITMConfig{
+		CAFile:    strings.TrimSpace(firstNonEmpty(caValue, fallback.CAFile)),
+		KeyFile:   strings.TrimSpace(firstNonEmpty(keyValue, fallback.KeyFile)),
+		Hostnames: append([]string{}, fallback.Hostnames...),
+	}
+	hostsValue = strings.TrimSpace(hostsValue)
+	if hostsValue == "" {
+		return cfg, nil
+	}
+	var hosts []string
+	if err := json.Unmarshal([]byte(hostsValue), &hosts); err != nil {
+		return sockstun.TLSMITMConfig{}, fmt.Errorf("socks_tls_mitm_hosts: %w", err)
+	}
+	cfg.Hostnames = hosts
 	return cfg, nil
 }
 

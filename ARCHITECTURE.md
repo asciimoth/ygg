@@ -438,6 +438,14 @@ Behavior:
   route network, so fallback DNS obeys sockstun proxy routing too. The protected
   zones `*.onion`, `*.i2p`, and `*.loki`, plus configured extra no-resolve
   zones, are never resolved and remain hostnames for routing.
+- Can optionally install a selective TLS MITM CONNECT handler. When configured
+  with user-supplied CA certificate and key files, matching TCP/443 requests are
+  selected using the original SOCKS hostname before sockstun DNS resolution or
+  proxy routing. Sockstun generates a per-host leaf certificate, terminates the
+  client TLS session, and dials plaintext TCP to port 80 on the same hostname
+  through the unresolved route path so hostname-based proxy routing still sees
+  the original destination. The default intercepted hostname patterns are
+  `*.ygg`, `*.meshname`, `*.meship`, `*.onion`, and `*.i2p`.
 - Implements `gonnect/tun.Tun` by embedding VTun, and closes both the SOCKS
   listener and VTun when detached or replaced.
 

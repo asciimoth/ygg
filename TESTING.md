@@ -238,6 +238,9 @@ The Docker sockstun suite validates that:
 - Replacing sockstun onto a new local SOCKS port closes the old proxy and makes the new one usable
 - Runtime `setTunSocksProxies` can route fallback non-Yggdrasil traffic through an outproxy inside Yggdrasil
 - A native-TUN client can use the outproxy directly with `curl --socks5-hostname`
+- Sockstun selective TLS MITM intercepts a matching TCP/443 hostname, requires
+  the client to trust the configured CA, and forwards plaintext HTTP to port 80
+  on the same hostname through the Yggdrasil-hosted outproxy
 
 ### How It Works
 
@@ -246,14 +249,19 @@ The runner is [tests/compat/run-sockstun.sh](/home/moth/projects/ygg/tests/compa
 For each run it:
 
 1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
-2. Generates one `outproxy` server config and one `sockstun` client config.
+2. Generates one `outproxy` server config, one `sockstun` client config, and a
+   temporary CA pair for the client's `TunSocksTLSMITM` option.
 3. Starts two privileged containers on an isolated Docker network.
 4. Adds a TLS peer from the client container to the server container.
-5. Starts a Python HTTP server bound to the server container's loopback address.
+5. Starts Python HTTP servers for the loopback outproxy test and the
+   hostname-based TLS MITM test.
 6. Configures the client sockstun default proxy to the server outproxy and uses `curl --socks5-hostname` inside the client container to fetch that HTTP endpoint.
 7. Mutates the client TUN attachment through `yggdrasilctl detachTun`, `attachTun`, and `replaceTun`.
 8. Clears the client sockstun default proxy and verifies clearnet-style traffic becomes unreachable again.
 9. Replaces the client TUN with a native TUN and verifies `curl` can use the server outproxy directly over Yggdrasil.
+10. Replaces the client TUN with sockstun again and verifies HTTPS to the
+    configured `.ygg` Docker alias fails without the CA, then succeeds with the
+    CA while the upstream server receives plaintext HTTP on port 80.
 
 ### Prerequisites
 

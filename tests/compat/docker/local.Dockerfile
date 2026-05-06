@@ -23,6 +23,7 @@ RUN apt-get update \
 		iproute2 \
 		iputils-ping \
 		jq \
+		openssl \
 		python3 \
 	&& rm -rf /var/lib/apt/lists/*
 

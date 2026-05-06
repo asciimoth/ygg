@@ -302,6 +302,9 @@ type AttachTunRequest struct {
 	SocksDefaultProxy string `json:"socks_default_proxy,omitempty"`
 	SocksDNSFallback  string `json:"socks_dns_fallback,omitempty"`
 	SocksNoResolve    string `json:"socks_no_resolve,omitempty"`
+	SocksTLSMITMCA    string `json:"socks_tls_mitm_ca,omitempty"`
+	SocksTLSMITMKey   string `json:"socks_tls_mitm_key,omitempty"`
+	SocksTLSMITMHosts string `json:"socks_tls_mitm_hosts,omitempty"`
 	MWO               string `json:"mwo,omitempty"`
 	MRO               string `json:"mro,omitempty"`
 }
@@ -356,7 +359,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		return
 	}
 	_ = a.AddHandler(
-		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "mwo", "mro"},
+		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -369,7 +372,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		},
 	)
 	_ = a.AddHandler(
-		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "mwo", "mro"},
+		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {

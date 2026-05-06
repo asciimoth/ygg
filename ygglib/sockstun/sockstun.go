@@ -31,6 +31,7 @@ type Config struct {
 	Proxies          []ProxyConfig
 	DefaultProxyURL  string
 	DNS              DNSConfig
+	TLSMITM          TLSMITMConfig
 	HandshakeTimeout time.Duration
 	Log              Logger
 }
@@ -98,7 +99,12 @@ func Create(cfg Config) (*Tun, error) {
 		conns:    make(map[net.Conn]struct{}),
 	}
 
-	server := newSocksServer(cfg, network)
+	server, err := newSocksServer(cfg, network)
+	if err != nil {
+		_ = listener.Close()
+		_ = vt.Close()
+		return nil, err
+	}
 
 	t.wg.Add(1)
 	go t.serve(ctx, server)
@@ -106,9 +112,16 @@ func Create(cfg Config) (*Tun, error) {
 	return t, nil
 }
 
-func newSocksServer(cfg Config, network *routeNetwork) *socksgo.Server {
+func newSocksServer(cfg Config, network *routeNetwork) (*socksgo.Server, error) {
+	handlers := map[protocol.Cmd]socksgo.CommandHandler(nil)
+	if mitm, err := newTLSMITM(cfg.TLSMITM, network, cfg.Log); err == nil && mitm != nil {
+		handlers = mitm.handlers()
+	} else if err != nil {
+		return nil, err
+	}
 	return &socksgo.Server{
 		Auth:              (&protocol.AuthHandlers{}).Add(&protocol.NoAuthHandler{}),
+		Handlers:          handlers,
 		Dialer:            network.Dial,
 		Listener:          network.Listen,
 		PacketDialer:      network.PacketDial,
@@ -116,7 +129,7 @@ func newSocksServer(cfg Config, network *routeNetwork) *socksgo.Server {
 		Resolver:          network,
 		DefaultListenHost: cfg.Address.String(),
 		HandshakeTimeout:  cfg.HandshakeTimeout,
-	}
+	}, nil
 }
 
 func (t *Tun) SocksAddr() net.Addr {

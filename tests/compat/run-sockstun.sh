@@ -14,6 +14,7 @@ CLIENT_CONT="${RUN_ID}-client"
 SERVER_LISTEN_PORT="${SERVER_LISTEN_PORT:-11001}"
 CLIENT_LISTEN_PORT="${CLIENT_LISTEN_PORT:-11002}"
 CLEARNET_HTTP_PORT="${CLEARNET_HTTP_PORT:-8081}"
+MITM_HTTP_NAME="${MITM_HTTP_NAME:-mitm-target.ygg}"
 ADMIN_ENDPOINT="unix:///var/run/yggdrasil.sock"
 
 SERVER_DIR="${TMP_DIR}/server"
@@ -172,6 +173,41 @@ wait_for_proxy_curl_failure() {
 	return 1
 }
 
+wait_for_tls_mitm_success() {
+	local proxy="$1"
+	local url="$2"
+	local body="$3"
+	local attempts="${4:-30}"
+	local i
+
+	for ((i = 0; i < attempts; i++)); do
+		if docker_shell "${CLIENT_CONT}" "curl -gfsS --cacert /config/mitm-ca.crt --socks5-hostname ${proxy} --max-time 3 ${url} | grep -q ${body}"; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "expected TLS MITM curl through ${proxy} to ${url} to return ${body}" >&2
+	return 1
+}
+
+wait_for_tls_mitm_untrusted_failure() {
+	local proxy="$1"
+	local url="$2"
+	local attempts="${3:-10}"
+	local i
+
+	for ((i = 0; i < attempts; i++)); do
+		if ! docker_shell "${CLIENT_CONT}" "curl -gfsS --socks5-hostname ${proxy} --max-time 2 ${url}"; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "expected TLS MITM curl through ${proxy} to ${url} without CA trust to fail" >&2
+	return 1
+}
+
 render_config() {
 	local image="$1"
 	local listen_port="$2"
@@ -201,12 +237,19 @@ render_config() {
 start_container() {
 	local name="$1"
 	local dir="$2"
+	local alias="${3:-}"
+	local alias_args=()
+
+	if [ -n "${alias}" ]; then
+		alias_args=(--network-alias "${alias}")
+	fi
 
 	run docker run -d \
 		--name "${name}" \
 		--hostname "${name}" \
 		--network "${NETWORK_NAME}" \
 		--network-alias "${name}" \
+		"${alias_args[@]}" \
 		--privileged \
 		-v "${dir}:/config" \
 		"${LOCAL_IMAGE}" \
@@ -231,9 +274,12 @@ run docker build -f "${ROOT_DIR}/tests/compat/docker/local.Dockerfile" -t "${LOC
 log "rendering sockstun/outproxy compatibility configs"
 render_config "${LOCAL_IMAGE}" "${SERVER_LISTEN_PORT}" "outproxy" "127.0.0.1:1080" >"${SERVER_DIR}/ygg.json"
 render_config "${LOCAL_IMAGE}" "${CLIENT_LISTEN_PORT}" "sockstun" "127.0.0.1:1080" >"${CLIENT_DIR}/ygg.json"
+run docker run --rm -v "${CLIENT_DIR}:/out" "${LOCAL_IMAGE}" openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout /out/mitm-ca.key -out /out/mitm-ca.crt -subj "/CN=ygg sockstun MITM test CA"
+docker run --rm -i "${LOCAL_IMAGE}" jq '.TunSocksTLSMITM = { ca_file: "/config/mitm-ca.crt", key_file: "/config/mitm-ca.key" }' <"${CLIENT_DIR}/ygg.json" >"${CLIENT_DIR}/ygg.json.tmp"
+mv "${CLIENT_DIR}/ygg.json.tmp" "${CLIENT_DIR}/ygg.json"
 
 run docker network create "${NETWORK_NAME}"
-start_container "${SERVER_CONT}" "${SERVER_DIR}"
+start_container "${SERVER_CONT}" "${SERVER_DIR}" "${MITM_HTTP_NAME}"
 start_container "${CLIENT_CONT}" "${CLIENT_DIR}"
 
 wait_for_cmd "${SERVER_CONT}" "test -S /var/run/yggdrasil.sock"
@@ -249,8 +295,11 @@ wait_for_peer_count "${CLIENT_CONT}" 1
 
 docker_shell "${SERVER_CONT}" "mkdir -p /tmp/clearnet && printf clearnet-ok >/tmp/clearnet/index.html && cd /tmp/clearnet && nohup python3 -m http.server ${CLEARNET_HTTP_PORT} --bind 127.0.0.1 >/tmp/clearnet-http.log 2>&1 &"
 wait_for_cmd "${SERVER_CONT}" "ss -ltn | grep -q ':${CLEARNET_HTTP_PORT}'"
+docker_shell "${SERVER_CONT}" "mkdir -p /tmp/mitm && printf mitm-plaintext-ok >/tmp/mitm/index.html && cd /tmp/mitm && nohup python3 -m http.server 80 --bind 0.0.0.0 >/tmp/mitm-http.log 2>&1 &"
+wait_for_cmd "${SERVER_CONT}" "ss -ltn | grep -q ':80'"
 OUTPROXY_URL="$(printf 'socks5://[%s]:1080' "${SERVER_ADDR}")"
 CLEARNET_URL="http://127.0.0.1:${CLEARNET_HTTP_PORT}/"
+MITM_URL="https://${MITM_HTTP_NAME}/"
 
 log "scenario 1: clearnet target is unavailable through sockstun without outproxy routing"
 wait_for_curl_failure "127.0.0.1:1080" "${CLEARNET_URL}"
@@ -279,5 +328,10 @@ wait_for_curl_failure "127.0.0.1:1081" "${CLEARNET_URL}"
 log "scenario 7: native TUN client reaches clearnet through server outproxy directly"
 run docker exec "${CLIENT_CONT}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" replaceTun type=native name=auto mtu=1500
 wait_for_proxy_curl_success "[${SERVER_ADDR}]:1080" "${CLEARNET_URL}" "clearnet-ok"
+
+log "scenario 8: sockstun selective TLS MITM turns matching TCP/443 into plaintext HTTP on port 80"
+run docker exec "${CLIENT_CONT}" yggdrasilctl -endpoint="${ADMIN_ENDPOINT}" replaceTun type=sockstun name=sockstun-mitm mtu=1500 socks_listen=127.0.0.1:1082 "socks_default_proxy=${OUTPROXY_URL}"
+wait_for_tls_mitm_untrusted_failure "127.0.0.1:1082" "${MITM_URL}"
+wait_for_tls_mitm_success "127.0.0.1:1082" "${MITM_URL}" "mitm-plaintext-ok"
 
 log "sockstun/outproxy compatibility suite completed successfully"

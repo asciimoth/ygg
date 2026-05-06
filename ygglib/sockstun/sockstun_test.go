@@ -41,9 +41,12 @@ func TestCreateStartsLocalSocksListener(t *testing.T) {
 
 func TestSocksServerUsesAllSocksgoDefaultCommandHandlers(t *testing.T) {
 	network := &routeNetwork{}
-	server := newSocksServer(Config{
+	server, err := newSocksServer(Config{
 		Address: net.ParseIP("200::1"),
 	}, network)
+	if err != nil {
+		t.Fatalf("newSocksServer: %v", err)
+	}
 
 	if server.Handlers != nil {
 		t.Fatal("expected nil handler map so socksgo default handlers are used")
@@ -135,6 +138,26 @@ func TestRouteNetworkSkipsProtectedZones(t *testing.T) {
 	}
 	if resolver.calls != 0 {
 		t.Fatalf("resolver called %d times for protected zones", resolver.calls)
+	}
+}
+
+func TestTLSMITMHostnameMatcher(t *testing.T) {
+	tests := []struct {
+		host    string
+		pattern string
+		want    bool
+	}{
+		{host: "svc.ygg", pattern: "*.ygg", want: true},
+		{host: "deep.svc.ygg", pattern: "*.ygg", want: true},
+		{host: "ygg", pattern: "*.ygg", want: false},
+		{host: "svc.meshname.", pattern: "*.meshname", want: true},
+		{host: "svc.example", pattern: "svc.example", want: true},
+		{host: "other.example", pattern: "svc.example", want: false},
+	}
+	for _, tt := range tests {
+		if got := matchHostnamePattern(tt.host, tt.pattern); got != tt.want {
+			t.Fatalf("matchHostnamePattern(%q, %q) = %v, want %v", tt.host, tt.pattern, got, tt.want)
+		}
 	}
 }
 

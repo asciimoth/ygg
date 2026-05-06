@@ -61,6 +61,7 @@ type NodeConfig struct {
 	TunSocksDefaultProxy string                     `json:",omitempty" comment:"Optional fallback SOCKS proxy URL for TunType \"sockstun\" or\n\"outproxy\". Sockstun sends unmatched non-Yggdrasil destinations to this\nproxy through VTun while keeping Yggdrasil addresses direct. Outproxy\nsends all unmatched destinations to this proxy through the outer network."`
 	TunSocksDNSFallback  string                     `json:",omitempty" comment:"Optional fallback DNS server for TunType \"sockstun\", for example\n\"[300:6223::53]:53\". Sockstun first tries mnlib mesh-name resolution\nfor SOCKS CONNECT/BIND and packet operations. If this fallback is set,\nother names are resolved by DNS requests sent through the same sockstun\nrouting pipeline, including second-hop and default proxy routing."`
 	TunSocksNoResolve    []string                   `json:",omitempty" comment:"Additional DNS zones that TunType \"sockstun\" must never resolve before\nrouting. The built-in protected zones are *.onion, *.i2p and *.loki.\nEntries may be written as \"example\", \".example\" or \"*.example\"."`
+	TunSocksTLSMITM      TunSocksTLSMITMConfig      `json:",omitempty" comment:"Optional selective TLS MITM for TunType \"sockstun\". When CAFile and\nKeyFile are set, sockstun intercepts matching TCP/443 CONNECT requests\nbefore DNS resolution or proxy routing, terminates client TLS with\ncertificates generated from that CA, and forwards plaintext TCP to port\n80 on the same hostname through normal sockstun routing. Hostnames uses\nwildcards such as \"*.ygg\"; if empty, sockstun uses the built-in mesh\nhostname set."`
 	TunMWO               int                        `json:",omitempty" comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
 	TunMRO               int                        `json:",omitempty" comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom."`
 	LogLookups           bool                       `json:",omitempty"`
@@ -94,6 +95,18 @@ type TransportNetworkConfig struct {
 type TunSocksProxyConfig struct {
 	Filter   string `json:"filter,omitempty" comment:"Destination filter in socksgo.BuildFilter format, for example\n\"*.onion,*.i2p,0.0.0.0/0\" or \"example.com:443\"."`
 	ProxyURL string `json:"proxy_url,omitempty" comment:"SOCKS proxy URL reachable inside Yggdrasil, for example\n\"socks5://[200::1]:1080\"."`
+}
+
+type TunSocksTLSMITMConfig struct {
+	CAFile    string   `json:"ca_file,omitempty" comment:"Path to a PEM encoded CA certificate trusted by local clients."`
+	KeyFile   string   `json:"key_file,omitempty" comment:"Path to the PEM encoded CA private key."`
+	Hostnames []string `json:"hostnames,omitempty" comment:"Hostname patterns to intercept on TCP/443, for example [\"*.ygg\"]."`
+}
+
+func (cfg *TunSocksTLSMITMConfig) normalize() {
+	cfg.CAFile = strings.TrimSpace(cfg.CAFile)
+	cfg.KeyFile = strings.TrimSpace(cfg.KeyFile)
+	cfg.Hostnames = normalizeStringSlice(cfg.Hostnames)
 }
 
 type MulticastInterfaceConfig struct {
@@ -138,6 +151,7 @@ func GenerateConfig() *NodeConfig {
 	cfg.TunSocksDefaultProxy = ""
 	cfg.TunSocksDNSFallback = ""
 	cfg.TunSocksNoResolve = []string{}
+	cfg.TunSocksTLSMITM = TunSocksTLSMITMConfig{}
 	cfg.NodeInfoPrivacy = false
 	if err := cfg.postprocessConfig(); err != nil {
 		panic(err)
@@ -200,6 +214,7 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.TunSocksDefaultProxy = strings.TrimSpace(cfg.TunSocksDefaultProxy)
 	cfg.TunSocksDNSFallback = strings.TrimSpace(cfg.TunSocksDNSFallback)
 	cfg.TunSocksNoResolve = normalizeStringSlice(cfg.TunSocksNoResolve)
+	cfg.TunSocksTLSMITM.normalize()
 	cfg.LocalDNSListen = strings.TrimSpace(cfg.LocalDNSListen)
 	if cfg.PrivateKeyPath != "" {
 		cfg.PrivateKey = nil
