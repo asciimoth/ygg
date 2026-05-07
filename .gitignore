@@ -46,3 +46,6 @@ coverage.out
 # Generated browser demo artifacts.
 /web/app.wasm
 /web/wasm_exec.js
+
+dist/
+

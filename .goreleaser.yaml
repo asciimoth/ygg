@@ -1,0 +1,163 @@
+version: 2
+
+project_name: yggd
+
+before:
+  hooks:
+    - go -C ygglib mod download
+    - go -C yggd mod download
+
+builds:
+  - id: yggd
+    main: ./yggd/yggd
+    binary: yggd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - "386"
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/asciimoth/ygg/ygglib/version.buildName={{ .ProjectName }} -X github.com/asciimoth/ygg/ygglib/version.buildVersion={{ .Version }}
+
+  - id: yggctl
+    main: ./yggd/yggctl
+    binary: yggctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - "386"
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/asciimoth/ygg/ygglib/version.buildName={{ .ProjectName }} -X github.com/asciimoth/ygg/ygglib/version.buildVersion={{ .Version }}
+
+  - id: genkeys
+    main: ./yggd/genkeys
+    binary: genkeys
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - "386"
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/asciimoth/ygg/ygglib/version.buildName={{ .ProjectName }} -X github.com/asciimoth/ygg/ygglib/version.buildVersion={{ .Version }}
+
+archives:
+  - id: yggd
+    ids:
+      - yggd
+      - yggctl
+      - genkeys
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i686
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - src: packaging/linux/yggd.service
+        dst: yggd.service
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - id: yggd
+    package_name: yggd
+    ids:
+      - yggd
+      - yggctl
+      - genkeys
+    vendor: asciimoth
+    homepage: https://github.com/asciimoth/ygg
+    maintainer: "{{ .Env.PACKAGE_MAINTAINER }}"
+    description: Yggdrasil network daemon and command line tools
+    license: LGPL-3.0
+    section: net
+    priority: optional
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: packaging/linux/yggd.service
+        dst: /usr/lib/systemd/system/yggd.service
+    rpm:
+      group: Applications/Internet
+
+signs:
+  - artifacts: all
+    cmd: gpg
+    args:
+      - --batch
+      - --yes
+      - --local-user
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - --output
+      - ${signature}
+      - --detach-sign
+      - ${artifact}
+
+release:
+  github:
+    owner: asciimoth
+    name: ygg
+  draft: false
+  prerelease: auto
+  mode: replace
+
+aurs:
+  - name: yggd-bin
+    homepage: https://github.com/asciimoth/ygg
+    description: Yggdrasil network daemon and command line tools
+    maintainers:
+      - "{{ .Env.PACKAGE_MAINTAINER }}"
+    license: LGPL-3.0
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "{{ .Env.AUR_GIT_URL }}"
+    provides:
+      - yggd
+      - yggctl
+      - genkeys
+    conflicts:
+      - yggd
+    depends:
+      - glibc
+    package: |-
+      install -Dm755 "./yggd" "${pkgdir}/usr/bin/yggd"
+      install -Dm755 "./yggctl" "${pkgdir}/usr/bin/yggctl"
+      install -Dm755 "./genkeys" "${pkgdir}/usr/bin/genkeys"
+      install -Dm644 "./yggd.service" "${pkgdir}/usr/lib/systemd/system/yggd.service"

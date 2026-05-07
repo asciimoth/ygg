@@ -5,7 +5,6 @@ package tunnative
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/netip"
 	"time"
 
@@ -108,13 +107,13 @@ func configureAddress(log Logger, device gtun.Tun, addr string) error {
 	addresses := []netip.Prefix{ipnet}
 	err = luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
 	if err == windows.ERROR_OBJECT_ALREADY_EXISTS {
-		cleanupAddressesOnDisconnectedInterfaces(windows.AF_INET6, addresses)
+		cleanupAddressesOnDisconnectedInterfaces(log, windows.AF_INET6, addresses)
 		err = luid.SetIPAddressesForFamily(windows.AF_INET6, addresses)
 	}
 	return err
 }
 
-func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, addresses []netip.Prefix) {
+func cleanupAddressesOnDisconnectedInterfaces(log Logger, family winipcfg.AddressFamily, addresses []netip.Prefix) {
 	if len(addresses) == 0 {
 		return
 	}

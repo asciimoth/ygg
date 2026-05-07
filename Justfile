@@ -16,6 +16,27 @@ tidy:
 	go -C web mod tidy
 	go work sync
 
+release-check-env:
+	@missing=0; \
+	for name in GITHUB_TOKEN GPG_FINGERPRINT PACKAGE_MAINTAINER AUR_KEY AUR_GIT_URL; do \
+		if [ -z "${!name:-}" ]; then \
+			echo "missing required environment variable: ${name}" >&2; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "${missing}" -ne 0 ]; then \
+		exit 1; \
+	fi
+
+release-check: release-check-env
+	goreleaser check
+
+release-snapshot: release-check-env
+	goreleaser release --clean --snapshot --skip=publish
+
+release: release-check-env
+	goreleaser release --clean
+
 web-build:
 	GOOS=js GOARCH=wasm go -C web build -o app.wasm .
 	@if [ -f "$(go env GOROOT)/misc/wasm/wasm_exec.js" ]; then \
@@ -50,6 +71,7 @@ run-sockstun-autopeer:
 	echo "MITM CA: ${ca_crt}"; \
 	echo "Curl:  curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} http://myip.ygg"; \
 	echo "HTTPS: curl -g --socks5-hostname ${SOCKS_LISTEN:-127.0.0.1:1080} --cacert ${ca_crt} https://myip.ygg"; \
+	echo "resolve: tor-resolve myip.ygg ${SOCKS_LISTEN:-127.0.0.1:1080}"; \
 	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
 
 run:

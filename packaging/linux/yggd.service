@@ -1,0 +1,14 @@
+[Unit]
+Description=Yggdrasil network daemon
+Documentation=https://yggdrasil-network.github.io/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/yggd -logto stdout
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
