@@ -16,6 +16,7 @@ require (
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/hjson/hjson-go/v4 v4.6.0 // indirect
+	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
 	golang.org/x/net v0.50.0 // indirect

@@ -28,3 +28,15 @@ go test ./examples/... --race
 The browser counterpart lives in `../web`. It uses the same Core + VTun pattern
 as `http_example`, but replaces the native/loopback carrier network with
 browser WebSocket dialing and exposes the HTTP client path in a web UI.
+
+## `lib_tutorial`
+
+`lib_tutorial` is the runnable companion for `../lib-tutorial.md`. It covers
+Core setup, custom transport registration, explicit transport network mappings,
+VTun TCP/UDP/HTTP usage, and autopeering helper setup.
+
+Run it with:
+
+```sh
+go run ./examples/lib_tutorial
+```
