@@ -148,6 +148,7 @@ aurs:
     license: LGPL-3.0
     private_key: "{{ .Env.AUR_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/{{ .ProjectName }}-bin.git"
+    git_ssh_command: '{{ .Env.SSH_BIN }} -i "{{ .KeyPath }}" -o StrictHostKeyChecking=accept-new -F /dev/null'
     provides:
       - yggd
       - yggctl
