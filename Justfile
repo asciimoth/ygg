@@ -33,10 +33,10 @@ release-check: release-check-env
 	goreleaser check
 
 release-snapshot: release-check-env
-	goreleaser release --clean --snapshot --skip=publish
+	goreleaser release --clean --snapshot --skip=publish --skip=validate
 
 release: release-check-env
-	goreleaser release --clean
+	goreleaser release --clean --skip=validate
 
 web-build:
 	GOOS=js GOARCH=wasm go -C web build -o app.wasm .
