@@ -10,8 +10,13 @@
 # - Enable the NixOS service from this flake:
 #     imports = [ inputs.ygg.nixosModules.yggd ];
 #     services.yggd.enable = true;
-#   The service runs yggd as root and lets the daemon read or auto-generate
-#   its platform-default config file.
+#     services.yggd.settings = {
+#       PrivateKeyPath = "/var/lib/yggd/private.pem";
+#       Peers = [ "tls://example.net:12345" ];
+#       TunType = "native";
+#     };
+#   The service runs yggd as root. Without configFile or settings, the daemon
+#   reads or auto-generates its platform-default config file.
 {
   description = "Yggdrasil Go library and daemon";
   inputs = {
@@ -177,6 +182,14 @@
         ...
       }: let
         cfg = config.services.yggd;
+        jsonFormat = pkgs.formats.json {};
+        generatedConfigFile = jsonFormat.generate "yggd.conf" cfg.settings;
+        effectiveConfigFile =
+          if cfg.configFile != null
+          then cfg.configFile
+          else if cfg.settings != null
+          then generatedConfigFile
+          else null;
       in {
         options.services.yggd = {
           enable = lib.mkEnableOption "Yggdrasil network daemon";
@@ -188,6 +201,102 @@
             description = "Package providing the yggd daemon.";
           };
 
+          configFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            example = "/etc/yggd/yggd.conf";
+            description = ''
+              Path to an existing HJSON or JSON daemon config file. This file is
+              passed to yggd with -useconffile and is useful when the config
+              contains secrets that should not be stored in the Nix store.
+            '';
+          };
+
+          settings = lib.mkOption {
+            type = lib.types.nullOr jsonFormat.type;
+            default = null;
+            example = lib.literalExpression ''
+              {
+                PrivateKeyPath = "/var/lib/yggd/private.pem";
+                Peers = [ "tls://example.net:12345" ];
+                InterfacePeers = {};
+                Listen = [ "tls://0.0.0.0:0" "quic://[::]:0" ];
+                AdminListen = "unix:///var/run/yggdrasil.sock";
+                AdminWebListen = "127.0.0.1:9002";
+                AdminWebStaticDir = "";
+                LocalDNSListen = "127.0.0.1:5353";
+                MulticastInterfaces = [
+                  {
+                    Regex = ".*";
+                    Beacon = true;
+                    Listen = true;
+                    Port = 0;
+                    Priority = 0;
+                    Password = "";
+                  }
+                ];
+                AllowedPublicKeys = [];
+                Transport = {
+                  DefaultNetwork = "native";
+                  NetworkMappings = {
+                    "*.onion" = null;
+                    "*.i2p" = null;
+                    "*.loki" = null;
+                  };
+                };
+                AutoPeer = {
+                  Enabled = false;
+                  Sources = [ "BUILTIN" ];
+                  FetchInterval = "1h";
+                  CheckInterval = "1m";
+                  MinimumConnected = 0;
+                  MinimumConnectedFromFetch = 0;
+                  Countries = [];
+                  TransportSchemes = [];
+                };
+                Jumper = {
+                  Enabled = false;
+                  Addresses = [];
+                  CheckInterval = "10s";
+                  LinkTimeout = "30s";
+                };
+                TunType = "native";
+                IfName = "auto";
+                IfMTU = 65535;
+                TunSocksListen = "127.0.0.1:1080";
+                TunSocksProxies = [
+                  {
+                    Filter = "*.onion,*.i2p";
+                    proxy_url = "socks5://[200::1]:9050";
+                  }
+                ];
+                TunSocksDefaultProxy = "";
+                TunSocksDNSFallback = "";
+                TunSocksNoResolve = [];
+                TunSocksTLSMITM = {
+                  ca_file = "/etc/yggd/sockstun-mitm-ca.crt";
+                  key_file = "/etc/yggd/sockstun-mitm-ca.key";
+                  hostnames = [ "*.ygg" "*.meshname" "*.meship" "*.onion" "*.i2p" ];
+                };
+                TunMWO = 0;
+                TunMRO = 0;
+                LogLookups = false;
+                NodeInfoPrivacy = false;
+                NodeInfo = {};
+              }
+            '';
+            description = ''
+              Daemon configuration rendered as JSON and passed to yggd with
+              -useconffile. Keys map directly to example.conf, for example
+              Peers, Listen, AdminListen, AutoPeer, Jumper, Transport and TUN
+              options.
+
+              Prefer PrivateKeyPath over PrivateKey so private key material is
+              not written to the Nix store. Set configFile instead when the
+              whole configuration should live outside the store.
+            '';
+          };
+
           extraArgs = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [];
@@ -197,6 +306,26 @@
         };
 
         config = lib.mkIf cfg.enable {
+          assertions = [
+            {
+              assertion = !(cfg.configFile != null && cfg.settings != null);
+              message = "services.yggd.configFile and services.yggd.settings are mutually exclusive.";
+            }
+          ];
+
+          warnings =
+            lib.optional
+            (
+              cfg.settings != null
+              && !(builtins.hasAttr "PrivateKey" cfg.settings)
+              && !(builtins.hasAttr "PrivateKeyPath" cfg.settings)
+            )
+            ''
+              services.yggd.settings does not set PrivateKey or PrivateKeyPath.
+              yggd will generate a new private key at each service start when
+              reading this generated config file.
+            '';
+
           environment.systemPackages = [ cfg.package ];
 
           systemd.services.yggd = {
@@ -207,7 +336,10 @@
             after = [ "network-online.target" ];
             serviceConfig = {
               Type = "simple";
-              ExecStart = "${lib.getExe cfg.package} -logto stdout ${lib.escapeShellArgs cfg.extraArgs}";
+              ExecStart =
+                "${lib.getExe cfg.package} -logto stdout"
+                + lib.optionalString (effectiveConfigFile != null) " -useconffile ${lib.escapeShellArg (toString effectiveConfigFile)}"
+                + lib.optionalString (cfg.extraArgs != []) " ${lib.escapeShellArgs cfg.extraArgs}";
               Restart = "on-failure";
               RestartSec = "5s";
             };
