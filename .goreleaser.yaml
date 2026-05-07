@@ -162,3 +162,8 @@ aurs:
       install -Dm755 "./yggctl" "${pkgdir}/usr/bin/yggctl"
       install -Dm755 "./genkeys" "${pkgdir}/usr/bin/genkeys"
       install -Dm644 "./yggd.service" "${pkgdir}/usr/lib/systemd/system/yggd.service"
+
+publishers:
+  - name: "GH Pages deb/rpm repo"
+    cmd: "{{ .Env.MYREPO }}/maintain add {{ abs .ArtifactPath }}"
+
