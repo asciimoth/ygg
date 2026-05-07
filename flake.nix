@@ -171,6 +171,7 @@
           coverage-reporter
 
           goreleaser
+          openssh
         ];
       };
     })
