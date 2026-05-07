@@ -147,7 +147,7 @@ aurs:
       - "{{ .Env.PACKAGE_MAINTAINER }}"
     license: LGPL-3.0
     private_key: "{{ .Env.AUR_KEY }}"
-    git_url: "{{ .Env.AUR_GIT_URL }}"
+    git_url: "ssh://aur@aur.archlinux.org/{{ .ProjectName }}-bin.git"
     provides:
       - yggd
       - yggctl

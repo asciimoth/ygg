@@ -1,4 +1,5 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
 
 test:
 	go test ./ygglib/... ./yggd/... ./examples/... ./web/... --race -count=1
@@ -18,7 +19,7 @@ tidy:
 
 release-check-env:
 	@missing=0; \
-	for name in GITHUB_TOKEN GPG_FINGERPRINT PACKAGE_MAINTAINER AUR_KEY AUR_GIT_URL; do \
+	for name in GITHUB_TOKEN GPG_FINGERPRINT PACKAGE_MAINTAINER AUR_KEY; do \
 		if [ -z "${!name:-}" ]; then \
 			echo "missing required environment variable: ${name}" >&2; \
 			missing=1; \
