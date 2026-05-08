@@ -18,9 +18,11 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
 	"github.com/asciimoth/gonnect/reject"
+	"github.com/asciimoth/mnlib"
 	"github.com/coder/websocket"
 
 	"github.com/asciimoth/ygg/ygglib/autopeer"
@@ -37,12 +39,14 @@ const (
 	requestTimeout       = 30 * time.Second
 	defaultCountries     = "finland,germany,hungary,netherlands,russia,united-states"
 	defaultSchemes       = "wss"
+	defaultDNSFallback   = "[300:6223::53]:53"
 )
 
 type startConfig struct {
 	ManualPeers      string `json:"manualPeers"`
 	Countries        string `json:"countries"`
 	TransportSchemes string `json:"transportSchemes"`
+	DNSFallback      string `json:"dnsFallback"`
 }
 
 type requestConfig struct {
@@ -97,6 +101,7 @@ func main() {
 		cfg := startConfig{
 			Countries:        defaultCountries,
 			TransportSchemes: defaultSchemes,
+			DNSFallback:      defaultDNSFallback,
 		}
 		if len(args) > 0 && args[0].Type() == js.TypeString {
 			if err := json.Unmarshal([]byte(args[0].String()), &cfg); err != nil {
@@ -258,7 +263,7 @@ func newBrowserNode(start startConfig) (*browserNode, error) {
 	n.rwc = rwc
 	n.adapter = adapter
 
-	vt, err := buildVTun(coreNode.Address())
+	vt, err := buildVTun(coreNode.Address(), start.DNSFallback)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +294,7 @@ func newTransportManager() (*transport.Manager, error) {
 	return manager, nil
 }
 
-func buildVTun(localIP net.IP) (*vtun.VTun, error) {
+func buildVTun(localIP net.IP, dnsFallback string) (*vtun.VTun, error) {
 	addr, ok := netip.AddrFromSlice(localIP)
 	if !ok {
 		return nil, fmt.Errorf("invalid yggdrasil address %q", localIP.String())
@@ -303,7 +308,25 @@ func buildVTun(localIP net.IP) (*vtun.VTun, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build vtun: %w", err)
 	}
+	configureVTunResolver(vt, dnsFallback)
 	return vt, nil
+}
+
+func configureVTunResolver(vt *vtun.VTun, dnsFallback string) {
+	dnsFallback = strings.TrimSpace(dnsFallback)
+	if dnsFallback == "" {
+		dnsFallback = defaultDNSFallback
+	}
+	resolver := mnlib.NewResolver(vt)
+	fallback := gonnect.ResolverCfg{
+		Dial: vt.Dial,
+		Server: &gonnect.DnsServer{
+			Addr: dnsFallback,
+		},
+	}.Build()
+	resolver.Fallback = &fallback
+	vt.SetLookup(resolver.LookupIP)
+	logLine("dns", fmt.Sprintf("configured mnlib resolver fallback_server=%q", dnsFallback))
 }
 
 func addManualPeers(coreNode *core.Core, raw string) error {

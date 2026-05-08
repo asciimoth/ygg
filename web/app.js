@@ -35,6 +35,7 @@ function startConfig() {
     manualPeers: document.getElementById('manualPeers').value,
     countries: document.getElementById('countries').value,
     transportSchemes: document.getElementById('schemes').value,
+    dnsFallback: document.getElementById('dnsFallback').value,
   };
 }
 

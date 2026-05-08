@@ -7,6 +7,7 @@ replace github.com/asciimoth/ygg/ygglib => ../ygglib
 require (
 	github.com/asciimoth/gonnect v0.12.0
 	github.com/asciimoth/gonnect-netstack v0.3.15
+	github.com/asciimoth/mnlib v0.2.0
 	github.com/asciimoth/ygg/ygglib v0.0.0
 	github.com/coder/websocket v1.8.14
 )
@@ -19,11 +20,15 @@ require (
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/hjson/hjson-go/v4 v4.6.0 // indirect
+	github.com/miekg/dns v1.1.72 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
+	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
+	golang.org/x/tools v0.41.0 // indirect
 	gvisor.dev/gvisor v0.0.0-20260325202830-7644cf3a343c // indirect
 )
