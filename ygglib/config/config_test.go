@@ -131,6 +131,11 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 		TunSocksDefaultProxy: "socks5://[300::1]:1080"
 		TunSocksDNSFallback: "[300:6223::53]:53"
 		TunSocksNoResolve: ["*.alt", " .mesh.local "]
+		TunFirewall: {
+			enabled: true
+			allowed_tcp_ports: [443, 22, 22]
+			allowed_udp_ports: [53]
+		}
 		TunMWO: 12
 		TunMRO: 8
 	}`
@@ -158,6 +163,15 @@ func TestConfigTunTypeDefaultsAndSockstunOptions(t *testing.T) {
 	}
 	if len(cfg.TunSocksNoResolve) != 2 || cfg.TunSocksNoResolve[0] != "*.alt" || cfg.TunSocksNoResolve[1] != ".mesh.local" {
 		t.Fatalf("unexpected sockstun no-resolve zones: %#v", cfg.TunSocksNoResolve)
+	}
+	if cfg.TunFirewall.Enabled == nil || !*cfg.TunFirewall.Enabled {
+		t.Fatalf("unexpected firewall enabled setting: %#v", cfg.TunFirewall.Enabled)
+	}
+	if len(cfg.TunFirewall.AllowedTCPPorts) != 2 || cfg.TunFirewall.AllowedTCPPorts[0] != 22 || cfg.TunFirewall.AllowedTCPPorts[1] != 443 {
+		t.Fatalf("unexpected firewall TCP ports: %#v", cfg.TunFirewall.AllowedTCPPorts)
+	}
+	if len(cfg.TunFirewall.AllowedUDPPorts) != 1 || cfg.TunFirewall.AllowedUDPPorts[0] != 53 {
+		t.Fatalf("unexpected firewall UDP ports: %#v", cfg.TunFirewall.AllowedUDPPorts)
 	}
 }
 

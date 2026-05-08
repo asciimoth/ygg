@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 )
 
 const maxPacketSize = 65535
@@ -78,7 +79,11 @@ func (s *attachmentSession) readLoop(tun *TunAdapter) {
 			continue
 		}
 		for i, b := range bufs[:n] {
-			if _, err := tun.rwc.Write(b[readOffset : readOffset+sizes[i]]); err != nil {
+			packet := b[readOffset : readOffset+sizes[i]]
+			if !tun.config.firewall.AllowOutgoing(packet, time.Now()) {
+				continue
+			}
+			if _, err := tun.rwc.Write(packet); err != nil {
 				tun.log.Debug("Unable to send packet:", err)
 			}
 		}

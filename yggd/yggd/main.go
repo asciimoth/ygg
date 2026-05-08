@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -431,6 +432,8 @@ func main() {
 				SocksTLSMITMHosts: mustMarshalStrings(cfg.TunSocksTLSMITM.Hostnames),
 				MWO:               fmt.Sprintf("%d", cfg.TunMWO),
 				MRO:               fmt.Sprintf("%d", cfg.TunMRO),
+				FirewallTCPPorts:  mustMarshalUint16s(cfg.TunFirewall.AllowedTCPPorts),
+				FirewallUDPPorts:  mustMarshalUint16s(cfg.TunFirewall.AllowedUDPPorts),
 			}, false); err != nil {
 				panic(err)
 			}
@@ -751,12 +754,20 @@ func (c *daemonTunController) Attach(req admin.AttachTunRequest, replace bool) e
 		return fmt.Errorf("unsupported tun type %q", typ)
 	}
 
+	firewallCfg, err := c.firewallConfigForAttach(typ, req)
+	if err != nil {
+		_ = device.Close()
+		return err
+	}
+	previousFirewall := c.node.tun.FirewallConfig()
+	c.node.tun.SetFirewallConfig(adminFirewallToTun(firewallCfg))
 	if replace {
 		err = c.node.tun.Replace(device, yggtun.AttachmentType(typ))
 	} else {
 		err = c.node.tun.Attach(device, yggtun.AttachmentType(typ))
 	}
 	if err != nil {
+		c.node.tun.SetFirewallConfig(previousFirewall)
 		_ = device.Close()
 		return err
 	}
@@ -864,6 +875,58 @@ func (c *daemonTunController) SetSocksDNS(cfg admin.TunSocksDNSConfig) error {
 	return nil
 }
 
+func (c *daemonTunController) GetFirewall() admin.TunFirewallConfig {
+	cfg := c.node.tun.FirewallConfig()
+	return admin.TunFirewallConfig{
+		Enabled:         cfg.Enabled,
+		AllowedTCPPorts: append([]uint16{}, cfg.AllowedTCPPorts...),
+		AllowedUDPPorts: append([]uint16{}, cfg.AllowedUDPPorts...),
+	}
+}
+
+func (c *daemonTunController) SetFirewall(cfg admin.TunFirewallConfig) error {
+	cfg.AllowedTCPPorts = normalizeUint16s(cfg.AllowedTCPPorts)
+	cfg.AllowedUDPPorts = normalizeUint16s(cfg.AllowedUDPPorts)
+	c.node.tun.SetFirewallConfig(adminFirewallToTun(cfg))
+	enabled := cfg.Enabled
+	c.cfg.TunFirewall.Enabled = &enabled
+	c.cfg.TunFirewall.AllowedTCPPorts = append([]uint16{}, cfg.AllowedTCPPorts...)
+	c.cfg.TunFirewall.AllowedUDPPorts = append([]uint16{}, cfg.AllowedUDPPorts...)
+	return nil
+}
+
+func (c *daemonTunController) firewallConfigForAttach(typ string, req admin.AttachTunRequest) (admin.TunFirewallConfig, error) {
+	cfg := admin.TunFirewallConfig{
+		Enabled:         effectiveTunFirewallEnabled(c.cfg, typ),
+		AllowedTCPPorts: append([]uint16{}, c.cfg.TunFirewall.AllowedTCPPorts...),
+		AllowedUDPPorts: append([]uint16{}, c.cfg.TunFirewall.AllowedUDPPorts...),
+	}
+	if strings.TrimSpace(req.FirewallEnabled) != "" {
+		enabled, err := strconv.ParseBool(req.FirewallEnabled)
+		if err != nil {
+			return admin.TunFirewallConfig{}, fmt.Errorf("firewall_enabled: %w", err)
+		}
+		cfg.Enabled = enabled
+	}
+	if strings.TrimSpace(req.FirewallTCPPorts) != "" {
+		ports, err := parseAdminUint16s(req.FirewallTCPPorts)
+		if err != nil {
+			return admin.TunFirewallConfig{}, fmt.Errorf("firewall_tcp_ports: %w", err)
+		}
+		cfg.AllowedTCPPorts = ports
+	}
+	if strings.TrimSpace(req.FirewallUDPPorts) != "" {
+		ports, err := parseAdminUint16s(req.FirewallUDPPorts)
+		if err != nil {
+			return admin.TunFirewallConfig{}, fmt.Errorf("firewall_udp_ports: %w", err)
+		}
+		cfg.AllowedUDPPorts = ports
+	}
+	cfg.AllowedTCPPorts = normalizeUint16s(cfg.AllowedTCPPorts)
+	cfg.AllowedUDPPorts = normalizeUint16s(cfg.AllowedUDPPorts)
+	return cfg, nil
+}
+
 func (c *daemonTunController) setActiveSocks(active socksTun) {
 	c.mu.Lock()
 	c.activeSocks = active
@@ -961,6 +1024,77 @@ func mustMarshalStrings(values []string) string {
 		panic(err)
 	}
 	return string(bs)
+}
+
+func mustMarshalUint16s(values []uint16) string {
+	if len(values) == 0 {
+		return ""
+	}
+	bs, err := json.Marshal(values)
+	if err != nil {
+		panic(err)
+	}
+	return string(bs)
+}
+
+func effectiveTunFirewallEnabled(cfg *config.NodeConfig, typ string) bool {
+	if cfg.TunFirewall.Enabled != nil {
+		return *cfg.TunFirewall.Enabled
+	}
+	return config.NormalizeTunType(typ) == "native"
+}
+
+func adminFirewallToTun(cfg admin.TunFirewallConfig) yggtun.FirewallConfig {
+	return yggtun.FirewallConfig{
+		Enabled:         cfg.Enabled,
+		AllowedTCPPorts: append([]uint16{}, cfg.AllowedTCPPorts...),
+		AllowedUDPPorts: append([]uint16{}, cfg.AllowedUDPPorts...),
+	}
+}
+
+func parseAdminUint16s(value string) ([]uint16, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return []uint16{}, nil
+	}
+	var values []uint16
+	if strings.HasPrefix(value, "[") {
+		if err := json.Unmarshal([]byte(value), &values); err != nil {
+			return nil, err
+		}
+		return normalizeUint16s(values), nil
+	}
+	parts := strings.Split(value, ",")
+	values = make([]uint16, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		v, err := strconv.ParseUint(part, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, uint16(v))
+	}
+	return normalizeUint16s(values), nil
+}
+
+func normalizeUint16s(values []uint16) []uint16 {
+	if len(values) == 0 {
+		return []uint16{}
+	}
+	seen := make(map[uint16]struct{}, len(values))
+	out := make([]uint16, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 func configToSockstunProxies(proxies []config.TunSocksProxyConfig) []sockstun.ProxyConfig {

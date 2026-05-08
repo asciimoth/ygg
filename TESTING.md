@@ -8,6 +8,7 @@ This repository has several main test layers:
 - A Linux Docker jumper suite that validates NodeInfo-based direct peering over an indirect route
 - A Linux Docker transport-control suite that validates runtime `transport.Manager` updates through the admin API
 - A Linux Docker sockstun suite that validates VTun-backed local SOCKS proxying and runtime TUN swaps
+- A Linux Docker TUN firewall suite that validates native-TUN firewall defaults and runtime allow-list changes
 - A Linux Docker topology suite that validates multi-hop local daemon graphs and runtime failover
 
 ## Standard Checks
@@ -90,6 +91,54 @@ Each run captures:
 - `yggdrasilctl -json getSelf`
 - `yggdrasilctl -json getPeers`
 - `yggdrasilctl -json getTun`
+
+## Docker TUN Firewall Suite
+
+Run the Docker firewall suite with:
+
+```bash
+just test-firewall
+```
+
+This target also uses `sudo` because it needs Docker access and privileged
+containers with native TUN devices.
+
+### What It Tests
+
+The Docker firewall suite validates that:
+
+- Native TUN attachments enable the TUN firewall by default
+- ICMPv6 ping remains reachable through the firewall
+- Unsolicited incoming TCP is blocked by default
+- Runtime `setTunFirewall` can allow and then disallow a specific incoming TCP port
+- Replacing a native TUN with `sockstun` defaults the firewall to disabled
+
+### How It Works
+
+The runner is [tests/compat/run-firewall.sh](/home/moth/projects/ygg/tests/compat/run-firewall.sh).
+
+For each run it:
+
+1. Builds a temporary Docker image from [tests/compat/docker/local.Dockerfile](/home/moth/projects/ygg/tests/compat/docker/local.Dockerfile).
+2. Generates two native-TUN daemon configs with admin enabled and multicast disabled.
+3. Starts two privileged containers on an isolated Docker network.
+4. Adds a TLS peer from one node to the other.
+5. Starts a Python HTTP server on one node's Yggdrasil address.
+6. Verifies ping succeeds while HTTP is blocked, allowed, and blocked again through `getTunFirewall` and `setTunFirewall`.
+7. Replaces the other node's native TUN with sockstun and verifies the firewall default changes to disabled.
+
+### Prerequisites
+
+The Docker firewall suite is Linux-only and expects:
+
+- Docker installed and usable through `sudo`
+- Support for privileged containers
+- A host kernel that allows TUN devices inside containers
+
+### Artifacts
+
+Temporary Docker resources are removed during cleanup. The suite is intended to
+fail fast and prints the failing Docker/admin command in the shell output.
 
 Containers, Docker network, and temporary Docker images are removed during cleanup.
 

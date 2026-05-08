@@ -1,4 +1,4 @@
-FROM golang:1.25.5-bookworm AS build
+FROM golang:1.26.2-bookworm AS build
 
 ARG YGG_UPSTREAM_REF=be5daeba7ad6b9eb3a30a3fa84e58d3962322dbd
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	gtun "github.com/asciimoth/gonnect/tun"
 
@@ -51,7 +52,8 @@ type TunAdapter struct {
 	log core.Logger
 
 	config struct {
-		mtu InterfaceMTU
+		mtu      InterfaceMTU
+		firewall *Firewall
 	}
 
 	controlCh chan any
@@ -149,6 +151,7 @@ func New(rwc ReadWriteCloser, log core.Logger, opts ...SetupOption) (*TunAdapter
 		stopCh:    make(chan struct{}),
 	}
 	tun.config.mtu = InterfaceMTU(defaultMTU)
+	tun.config.firewall = NewFirewall(FirewallConfig{})
 	for _, opt := range opts {
 		tun._applyOption(opt)
 	}
@@ -221,6 +224,18 @@ func (tun *TunAdapter) Name() string {
 
 func (tun *TunAdapter) MTU() uint64 {
 	return tun.Status().MTU
+}
+
+func (tun *TunAdapter) SetFirewallConfig(cfg FirewallConfig) {
+	tun.config.firewall.SetConfig(cfg)
+}
+
+func (tun *TunAdapter) FirewallConfig() FirewallConfig {
+	return tun.config.firewall.Config()
+}
+
+func (tun *TunAdapter) FirewallStatus() FirewallStatus {
+	return tun.config.firewall.Status()
 }
 
 func (tun *TunAdapter) desiredMTU() uint64 {
@@ -364,6 +379,10 @@ func (s *supervisorState) routePacket(tun *TunAdapter, packet []byte) {
 	}
 	if current.mtu > 0 && uint64(len(packet)) > current.mtu {
 		tun.log.Debugf("Dropping oversized packet len=%d mtu=%d for %s", len(packet), current.mtu, current.name)
+		bufPool.Put(packet[:bufPoolSize])
+		return
+	}
+	if !tun.config.firewall.AllowIncoming(packet, time.Now()) {
 		bufPool.Put(packet[:bufPoolSize])
 		return
 	}

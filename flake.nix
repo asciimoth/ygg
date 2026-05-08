@@ -279,6 +279,11 @@
                   key_file = "/etc/yggd/sockstun-mitm-ca.key";
                   hostnames = [ "*.ygg" "*.meshname" "*.meship" "*.onion" "*.i2p" ];
                 };
+                TunFirewall = {
+                  enabled = null;
+                  allowed_tcp_ports = [];
+                  allowed_udp_ports = [];
+                };
                 TunMWO = 0;
                 TunMRO = 0;
                 LogLookups = false;

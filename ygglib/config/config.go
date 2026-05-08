@@ -30,6 +30,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,6 +66,7 @@ type NodeConfig struct {
 	TunSocksDNSFallback  string                     `comment:"Optional fallback DNS server for TunType \"sockstun\". Sockstun first uses\nmnlib mesh-name resolution and, when a lookup succeeds, routes the request\nusing the resolved address. If this DNS server is set, fallback DNS queries\nthemselves travel through the same sockstun routing pipeline, including\nTunSocksProxies and TunSocksDefaultProxy. The built-in protected zones\n*.onion, *.i2p and *.loki are never resolved and are routed as hostnames.\nCommunity-hosted fallback DNS servers include:\n- [324:71e:281a:9ed3::53]:53\n- [302:db60::53]:53\n- [300:6223::53]:53\n- [302:7991::53]:53\n- [202:1d4e:724e:de52:8273:e2b5:4988:a9ba]:53"`
 	TunSocksNoResolve    []string                   `comment:"Additional DNS zones that TunType \"sockstun\" must never resolve before\nrouting. Entries may be written as \"example\", \".example\" or \"*.example\"."`
 	TunSocksTLSMITM      TunSocksTLSMITMConfig      `comment:"Optional selective TLS MITM for TunType \"sockstun\". When ca_file and\nkey_file point to a pre-generated local CA certificate and private key,\nsockstun intercepts matching TCP/443 CONNECT requests before DNS\nresolution or proxy routing, terminates client TLS using certificates\ngenerated from that CA, and forwards plaintext TCP to port 80 on the same\nhostname through normal sockstun routing. Clients must trust the CA.\nIf hostnames is empty, the defaults are:\n*.ygg, *.meshname, *.meship, *.onion and *.i2p.\n\nExample:\nTunSocksTLSMITM: {\n  ca_file: \"/etc/yggd/sockstun-mitm-ca.crt\",\n  key_file: \"/etc/yggd/sockstun-mitm-ca.key\",\n  hostnames: [\"*.ygg\", \"*.meshname\", \"*.meship\", \"*.onion\", \"*.i2p\"]\n}\n\nCA generation example:\nopenssl genrsa -out ca.key 2048\nopenssl req -x509 -new -nodes -key ca.key -sha256 -days 1024 -out ca.crt -subj \"/CN=MyTestCA/O=MyOrg/C=US\""`
+	TunFirewall          TunFirewallConfig          `comment:"Optional IP firewall for packets between the attached TUN implementation\nand core. When Enabled is null, the daemon enables it for TunType \"native\"\nand disables it for other TUN types. ICMPv6 is always allowed. Outgoing TCP\nand UDP create temporary return-flow entries. Unsolicited incoming TCP and\nUDP are allowed only for the listed destination ports.\nExample:\nTunFirewall: { enabled: true, allowed_tcp_ports: [22, 80], allowed_udp_ports: [53] }"`
 	TunMWO               int                        `comment:"Minimum write offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom.\nIt is mostly debug config option."`
 	TunMRO               int                        `comment:"Minimum read offset for VTun-backed TUN implementations. Leave at 0\nunless a custom packet path needs reserved headroom.\nIt is mostly debug config option."`
 	LogLookups           bool                       `comment:"Enables the \"lookups\" admin API handler, which records lookup activity\nfor later inspection over the admin socket."`
@@ -117,6 +119,17 @@ func (cfg *TunSocksTLSMITMConfig) normalize() {
 	cfg.CAFile = strings.TrimSpace(cfg.CAFile)
 	cfg.KeyFile = strings.TrimSpace(cfg.KeyFile)
 	cfg.Hostnames = normalizeStringSlice(cfg.Hostnames)
+}
+
+type TunFirewallConfig struct {
+	Enabled         *bool    `json:"enabled,omitempty" comment:"Set to true or false to force the firewall state, or null/omit to use the TunType default."`
+	AllowedTCPPorts []uint16 `json:"allowed_tcp_ports,omitempty" comment:"Unsolicited incoming TCP destination ports to allow."`
+	AllowedUDPPorts []uint16 `json:"allowed_udp_ports,omitempty" comment:"Unsolicited incoming UDP destination ports to allow."`
+}
+
+func (cfg *TunFirewallConfig) normalize() {
+	cfg.AllowedTCPPorts = normalizePortSlice(cfg.AllowedTCPPorts)
+	cfg.AllowedUDPPorts = normalizePortSlice(cfg.AllowedUDPPorts)
 }
 
 type MulticastInterfaceConfig struct {
@@ -235,6 +248,7 @@ func (cfg *NodeConfig) postprocessConfig() error {
 	cfg.TunSocksDNSFallback = strings.TrimSpace(cfg.TunSocksDNSFallback)
 	cfg.TunSocksNoResolve = normalizeStringSlice(cfg.TunSocksNoResolve)
 	cfg.TunSocksTLSMITM.normalize()
+	cfg.TunFirewall.normalize()
 	cfg.LocalDNSListen = strings.TrimSpace(cfg.LocalDNSListen)
 	cfg.AdminWebListen = strings.TrimSpace(cfg.AdminWebListen)
 	cfg.AdminWebStaticDir = strings.TrimSpace(cfg.AdminWebStaticDir)
@@ -448,6 +462,23 @@ func normalizeTunSocksProxies(values []TunSocksProxyConfig) []TunSocksProxyConfi
 		}
 		out = append(out, value)
 	}
+	return out
+}
+
+func normalizePortSlice(values []uint16) []uint16 {
+	if len(values) == 0 {
+		return []uint16{}
+	}
+	seen := make(map[uint16]struct{}, len(values))
+	out := make([]uint16, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
 }
 

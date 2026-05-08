@@ -337,3 +337,50 @@ func TestTunAdapterAttachVTun(t *testing.T) {
 		return status.Attached && status.Type == "vtun" && status.Name == "vtun-test"
 	})
 }
+
+func TestTunAdapterFirewallFiltersBothDirections(t *testing.T) {
+	rwc := newFakeRWC()
+	adapter, err := New(rwc, testLogger{}, FirewallConfig{Enabled: true, AllowedTCPPorts: []uint16{22}})
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	defer func() {
+		_ = adapter.Stop()
+		_ = rwc.Close()
+	}()
+
+	ft := newFakeTun("tun-firewall", 1500, 4, 3)
+	if err := adapter.Attach(ft, AttachmentType("fake")); err != nil {
+		t.Fatalf("Attach(): %v", err)
+	}
+	waitFor(t, func() bool { return adapter.Status().Enabled })
+
+	rwc.readCh <- testIPv6Packet(ipProtoTCP, 50000, 23, 0x02)
+	select {
+	case got := <-ft.writeCh:
+		t.Fatalf("blocked inbound TCP reached TUN: %v", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	rwc.readCh <- testIPv6Packet(ipProtoTCP, 50000, 22, 0x02)
+	select {
+	case <-ft.writeCh:
+	case <-time.After(time.Second):
+		t.Fatal("allowed inbound TCP did not reach TUN")
+	}
+
+	ft.readCh <- testIPv6Packet(ipProtoTCP, 41000, 443, 0x02)
+	waitFor(t, func() bool { return rwc.writeCount() == 1 })
+	rwc.readCh <- testReverseIPv6Packet(ipProtoTCP, 443, 41000, 0x12)
+	select {
+	case <-ft.writeCh:
+	case <-time.After(time.Second):
+		t.Fatal("return TCP flow did not reach TUN")
+	}
+
+	ft.readCh <- testIPv6Packet(132, 0, 0, 0)
+	time.Sleep(100 * time.Millisecond)
+	if got := rwc.writeCount(); got != 1 {
+		t.Fatalf("blocked outbound protocol reached core, write count = %d", got)
+	}
+}

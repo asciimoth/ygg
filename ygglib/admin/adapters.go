@@ -485,6 +485,11 @@ type TunSocksDNSController interface {
 	SetSocksDNS(TunSocksDNSConfig) error
 }
 
+type TunFirewallController interface {
+	GetFirewall() TunFirewallConfig
+	SetFirewall(TunFirewallConfig) error
+}
+
 type AttachTunRequest struct {
 	Type              string `json:"type,omitempty"`
 	Name              string `json:"name,omitempty"`
@@ -499,6 +504,28 @@ type AttachTunRequest struct {
 	SocksTLSMITMHosts string `json:"socks_tls_mitm_hosts,omitempty"`
 	MWO               string `json:"mwo,omitempty"`
 	MRO               string `json:"mro,omitempty"`
+	FirewallEnabled   string `json:"firewall_enabled,omitempty"`
+	FirewallTCPPorts  string `json:"firewall_tcp_ports,omitempty"`
+	FirewallUDPPorts  string `json:"firewall_udp_ports,omitempty"`
+}
+
+type GetTunFirewallResponse struct {
+	Enabled         bool     `json:"enabled"`
+	AllowedTCPPorts []uint16 `json:"allowed_tcp_ports"`
+	AllowedUDPPorts []uint16 `json:"allowed_udp_ports"`
+	TrackedFlows    int      `json:"tracked_flows"`
+}
+
+type SetTunFirewallRequest struct {
+	Enabled         string `json:"enabled,omitempty"`
+	AllowedTCPPorts string `json:"allowed_tcp_ports,omitempty"`
+	AllowedUDPPorts string `json:"allowed_udp_ports,omitempty"`
+}
+
+type TunFirewallConfig struct {
+	Enabled         bool
+	AllowedTCPPorts []uint16
+	AllowedUDPPorts []uint16
 }
 
 type TunSocksProxyConfig struct {
@@ -551,7 +578,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		return
 	}
 	_ = a.AddHandler(
-		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro"},
+		"attachTun", "Attach a TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro", "firewall_enabled", "firewall_tcp_ports", "firewall_udp_ports"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -564,7 +591,7 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 		},
 	)
 	_ = a.AddHandler(
-		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro"},
+		"replaceTun", "Replace the active TUN implementation", []string{"type", "name", "mtu", "socks_listen", "socks_proxies", "socks_default_proxy", "socks_dns_fallback", "socks_no_resolve", "socks_tls_mitm_ca", "socks_tls_mitm_key", "socks_tls_mitm_hosts", "mwo", "mro", "firewall_enabled", "firewall_tcp_ports", "firewall_udp_ports"},
 		func(in json.RawMessage) (interface{}, error) {
 			req := AttachTunRequest{}
 			if err := json.Unmarshal(in, &req); err != nil {
@@ -661,6 +688,91 @@ func (a *AdminSocket) SetupTunHandlers(t *tun.TunAdapter, controllers ...TunCont
 			},
 		)
 	}
+	if firewallController, ok := controller.(TunFirewallController); ok {
+		_ = a.AddHandler(
+			"getTunFirewall", "Show TUN IP firewall configuration and state", []string{},
+			func(_ json.RawMessage) (interface{}, error) {
+				cfg := firewallController.GetFirewall()
+				status := t.FirewallStatus()
+				return GetTunFirewallResponse{
+					Enabled:         cfg.Enabled,
+					AllowedTCPPorts: cfg.AllowedTCPPorts,
+					AllowedUDPPorts: cfg.AllowedUDPPorts,
+					TrackedFlows:    status.TrackedFlows,
+				}, nil
+			},
+		)
+		_ = a.AddHandler(
+			"setTunFirewall", "Replace TUN IP firewall configuration", []string{"enabled", "allowed_tcp_ports", "allowed_udp_ports"},
+			func(in json.RawMessage) (interface{}, error) {
+				req := SetTunFirewallRequest{}
+				if err := json.Unmarshal(in, &req); err != nil {
+					return nil, err
+				}
+				cfg := firewallController.GetFirewall()
+				if strings.TrimSpace(req.Enabled) != "" {
+					enabled, err := strconv.ParseBool(req.Enabled)
+					if err != nil {
+						return nil, fmt.Errorf("enabled: %w", err)
+					}
+					cfg.Enabled = enabled
+				}
+				if strings.TrimSpace(req.AllowedTCPPorts) != "" {
+					ports, err := parseAdminPorts(req.AllowedTCPPorts)
+					if err != nil {
+						return nil, fmt.Errorf("allowed_tcp_ports: %w", err)
+					}
+					cfg.AllowedTCPPorts = ports
+				}
+				if strings.TrimSpace(req.AllowedUDPPorts) != "" {
+					ports, err := parseAdminPorts(req.AllowedUDPPorts)
+					if err != nil {
+						return nil, fmt.Errorf("allowed_udp_ports: %w", err)
+					}
+					cfg.AllowedUDPPorts = ports
+				}
+				if err := firewallController.SetFirewall(cfg); err != nil {
+					return nil, err
+				}
+				cfg = firewallController.GetFirewall()
+				status := t.FirewallStatus()
+				return GetTunFirewallResponse{
+					Enabled:         cfg.Enabled,
+					AllowedTCPPorts: cfg.AllowedTCPPorts,
+					AllowedUDPPorts: cfg.AllowedUDPPorts,
+					TrackedFlows:    status.TrackedFlows,
+				}, nil
+			},
+		)
+	}
+}
+
+func parseAdminPorts(value string) ([]uint16, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return []uint16{}, nil
+	}
+	var ports []uint16
+	if strings.HasPrefix(value, "[") {
+		if err := json.Unmarshal([]byte(value), &ports); err != nil {
+			return nil, err
+		}
+		return ports, nil
+	}
+	parts := strings.Split(value, ",")
+	ports = make([]uint16, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		v, err := strconv.ParseUint(part, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		ports = append(ports, uint16(v))
+	}
+	return ports, nil
 }
 
 func keyToIP(keyHex string) string {

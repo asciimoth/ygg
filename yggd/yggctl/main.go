@@ -334,6 +334,17 @@ func run() int {
 		}
 		_ = table.Render()
 
+	case "gettunfirewall":
+		var resp admin.GetTunFirewallResponse
+		if err := json.Unmarshal(recv.Response, &resp); err != nil {
+			panic(err)
+		}
+		_ = table.Append([]string{"Firewall enabled:", fmt.Sprintf("%#v", resp.Enabled)})
+		_ = table.Append([]string{"Allowed TCP ports:", fmt.Sprintf("%v", resp.AllowedTCPPorts)})
+		_ = table.Append([]string{"Allowed UDP ports:", fmt.Sprintf("%v", resp.AllowedUDPPorts)})
+		_ = table.Append([]string{"Tracked flows:", fmt.Sprintf("%d", resp.TrackedFlows)})
+		_ = table.Render()
+
 	case "addpeer", "removepeer":
 
 	default:

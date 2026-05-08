@@ -88,3 +88,27 @@ func TestNewTransportManagerSupportsSocksMappings(t *testing.T) {
 		t.Fatalf("unexpected mapped network config: %#v", got)
 	}
 }
+
+func TestEffectiveTunFirewallEnabledDefaultsByTunType(t *testing.T) {
+	cfg := config.GenerateConfig()
+	if !effectiveTunFirewallEnabled(cfg, "native") {
+		t.Fatal("native TUN should enable firewall by default")
+	}
+	if effectiveTunFirewallEnabled(cfg, "sockstun") {
+		t.Fatal("sockstun should disable firewall by default")
+	}
+	if effectiveTunFirewallEnabled(cfg, "outproxy") {
+		t.Fatal("outproxy should disable firewall by default")
+	}
+
+	enabled := false
+	cfg.TunFirewall.Enabled = &enabled
+	if effectiveTunFirewallEnabled(cfg, "native") {
+		t.Fatal("explicit false should override native default")
+	}
+
+	enabled = true
+	if !effectiveTunFirewallEnabled(cfg, "sockstun") {
+		t.Fatal("explicit true should override sockstun default")
+	}
+}

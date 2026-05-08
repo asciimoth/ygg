@@ -64,8 +64,8 @@ Key outputs consumed by other packages:
 - `AdminListen`, `AdminWebListen`, `AdminWebStaticDir`
 - `LocalDNSListen` for the optional daemon-owned local DNS listener
 - `MulticastInterfaces`
-- `TunType`, `IfName`, `IfMTU`, `TunSocksListen`, `TunMWO`, `TunMRO` for
-  daemon-owned TUN setup
+- `TunType`, `IfName`, `IfMTU`, `TunSocksListen`, `TunFirewall`, `TunMWO`,
+  `TunMRO` for daemon-owned TUN setup
 
 This package is intentionally passive. It does not start services.
 
@@ -434,6 +434,10 @@ Behavior:
   without killing the adapter or `core`.
 - Updates the effective upstream MTU whenever a new attachment is installed or
   the active TUN reports an MTU change.
+- Optionally applies a stateful IPv6 firewall between the attachment and
+  `ipv6rwc`. The firewall always allows ICMPv6, allows outbound TCP/UDP while
+  tracking return flows, and allows unsolicited inbound TCP/UDP only on
+  configured destination ports.
 - Can run detached while still draining the upstream queue so higher layers do
   not block.
 
@@ -668,6 +672,11 @@ In the default daemon, attachments are created one layer above this via
 `tunnative.Create(...)`, `sockstun.Create(...)` or `outproxy.Create(...)` and
 then explicitly attached to `tun.TunAdapter`.
 
+The daemon also decides the firewall default for each attachment. Native TUN
+attachments default to firewall enabled, while VTun-backed `sockstun` and
+`outproxy` attachments default to disabled unless config or admin explicitly
+sets a value.
+
 ### 5. Local control API
 
 `admin.AdminSocket` exposes a handler registry:
@@ -684,10 +693,12 @@ in, `attachTun`, `replaceTun`, and `detachTun`. `attachTun`/`replaceTun` accept
 the same implementation type names as config (`native`, `sockstun`, `outproxy`,
 `none`) plus implementation options such as `socks_listen`, `socks_proxies`,
 `socks_default_proxy`, `socks_dns_fallback`, `socks_no_resolve`, `mtu`, `mwo`,
-and `mro`. When the controller supports TUN SOCKS proxy routing, admin also
-exposes `getTunSocksProxies` and `setTunSocksProxies` for runtime filter and
-fallback proxy updates. Sockstun DNS settings are exposed as `getTunSocksDNS`
-and `setTunSocksDNS`; outproxy rejects non-empty DNS routing settings.
+`mro`, and optional firewall settings. When the controller supports TUN SOCKS
+proxy routing, admin also exposes `getTunSocksProxies` and
+`setTunSocksProxies` for runtime filter and fallback proxy updates. Sockstun
+DNS settings are exposed as `getTunSocksDNS` and `setTunSocksDNS`; outproxy
+rejects non-empty DNS routing settings. TUN firewall state is exposed as
+`getTunFirewall` and `setTunFirewall`.
 
 This keeps admin transport and adapter glue centralized while leaving business
 logic distributed in packages that do not depend on the admin API.
@@ -700,12 +711,13 @@ For local application traffic:
 
 1. The active TUN attachment reads an IPv6 packet from the kernel or virtual
    implementation.
-2. `tun` forwards the packet to `ipv6rwc`.
-3. `ipv6rwc` validates source/destination addressing and resolves the remote
+2. `tun` applies the optional TUN firewall outbound policy.
+3. `tun` forwards the packet to `ipv6rwc`.
+4. `ipv6rwc` validates source/destination addressing and resolves the remote
    public key from the destination address or subnet.
-4. `core` writes the payload into the Ironwood encrypted routed overlay.
-5. `core.links` ensures at least one direct peer path exists to carry traffic.
-6. If `jumper` is enabled, the same destination key notification can trigger a
+5. `core` writes the payload into the Ironwood encrypted routed overlay.
+6. `core.links` ensures at least one direct peer path exists to carry traffic.
+7. If `jumper` is enabled, the same destination key notification can trigger a
    NodeInfo lookup and an opportunistic direct link attempt.
 
 For inbound traffic:
@@ -713,8 +725,9 @@ For inbound traffic:
 1. `core` receives an encrypted routed packet from Ironwood.
 2. `core.ReadFrom` filters for session traffic.
 3. `ipv6rwc` validates the IPv6 payload and source mapping.
-4. `tun` queues the IPv6 packet for the current attachment.
-5. The active attachment writes the packet into the OS or virtual TUN.
+4. `tun` applies the optional TUN firewall inbound policy.
+5. `tun` queues the IPv6 packet for the current attachment.
+6. The active attachment writes the packet into the OS or virtual TUN.
 
 If no attachment is active, `tun` continues draining upstream packets and drops
 them rather than deadlocking `core`.

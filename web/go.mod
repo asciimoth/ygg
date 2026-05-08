@@ -1,13 +1,13 @@
 module github.com/asciimoth/ygg/web
 
-go 1.26.2
+go 1.25.5
 
 replace github.com/asciimoth/ygg/ygglib => ../ygglib
 
 require (
 	github.com/asciimoth/gonnect v0.12.0
 	github.com/asciimoth/gonnect-netstack v0.3.15
-	github.com/asciimoth/irca v0.1.0
+	github.com/asciimoth/irca v0.2.0
 	github.com/asciimoth/mnlib v0.2.0
 	github.com/asciimoth/ygg/ygglib v0.0.0
 	github.com/coder/websocket v1.8.14
