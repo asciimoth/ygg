@@ -8,6 +8,8 @@ github.com/asciimoth/gonnect v0.12.0 h1:peLCjuJcj4sQNaphxgN+im7FlOVQItRewTkuIvJg
 github.com/asciimoth/gonnect v0.12.0/go.mod h1:XwXDVDjucVhOa/cifySEx+ij8veNKhtzUTnCdF1p+ug=
 github.com/asciimoth/gonnect-netstack v0.3.15 h1:DCT111HutpzoPikOndJLC6AuWC+aTYruB2oi376Ygmw=
 github.com/asciimoth/gonnect-netstack v0.3.15/go.mod h1:m1cvfzQ3fe0F8P303Cqf9/O8BH6TCXwZPaVJ9qD9lEk=
+github.com/asciimoth/irca v0.1.0 h1:7vDps1Ht66lyGgLyfe2/+lut59DTOanP5I3BQHTgPrU=
+github.com/asciimoth/irca v0.1.0/go.mod h1:iY/5otigj5ZqsmKDWddVXSitYiUYkxz60fy055Jvq9o=
 github.com/asciimoth/mnlib v0.2.0 h1:BLxODGdkqXAhzI7waiCYpn5KDr+B8lHeMUCnGXBUurA=
 github.com/asciimoth/mnlib v0.2.0/go.mod h1:PptOOJSRe5JcIXvs6gZk16KGO1A7NIL7JlW34e2ksYE=
 github.com/bits-and-blooms/bitset v1.24.2/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=

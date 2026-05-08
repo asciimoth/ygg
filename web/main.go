@@ -22,6 +22,7 @@ import (
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
 	"github.com/asciimoth/gonnect/reject"
+	"github.com/asciimoth/irca"
 	"github.com/asciimoth/mnlib"
 	"github.com/coder/websocket"
 
@@ -40,6 +41,7 @@ const (
 	defaultCountries     = "finland,germany,hungary,netherlands,russia,united-states"
 	defaultSchemes       = "wss"
 	defaultDNSFallback   = "[300:6223::53]:53"
+	defaultIRCServer     = "[324:71e:281a:9ed3::41]:6667"
 )
 
 type startConfig struct {
@@ -54,6 +56,22 @@ type requestConfig struct {
 	URL     string `json:"url"`
 	Headers string `json:"headers"`
 	Body    string `json:"body"`
+}
+
+type ircConnectConfig struct {
+	Server           string `json:"server"`
+	Nick             string `json:"nick"`
+	Username         string `json:"username"`
+	Realname         string `json:"realname"`
+	Channel          string `json:"channel"`
+	NickServMode     string `json:"nickServMode"`
+	NickServPassword string `json:"nickServPassword"`
+	NickServEmail    string `json:"nickServEmail"`
+}
+
+type ircSendConfig struct {
+	Target string `json:"target"`
+	Text   string `json:"text"`
 }
 
 type appState struct {
@@ -82,10 +100,17 @@ type browserNode struct {
 	adapter  *yggtun.TunAdapter
 	vt       *vtun.VTun
 	autopeer *autopeer.Manager
+	irc      *ircSession
 }
 
 type browserWebSocketTransport struct {
 	schemes []string
+}
+
+type ircSession struct {
+	client *irca.Client
+	server string
+	nick   string
 }
 
 type jsLogger struct{}
@@ -125,6 +150,28 @@ func main() {
 			return nil, err
 		}
 		return runHTTPRequest(cfg)
+	}))
+	js.Global().Set("yggDemoIRCConnect", promiseFunc(func(args []js.Value) (any, error) {
+		cfg := ircConnectConfig{Server: defaultIRCServer}
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			if err := json.Unmarshal([]byte(args[0].String()), &cfg); err != nil {
+				return nil, err
+			}
+		}
+		return connectIRC(cfg)
+	}))
+	js.Global().Set("yggDemoIRCDisconnect", promiseFunc(func(args []js.Value) (any, error) {
+		return map[string]string{"message": "irc disconnected"}, disconnectIRC()
+	}))
+	js.Global().Set("yggDemoIRCSend", promiseFunc(func(args []js.Value) (any, error) {
+		var cfg ircSendConfig
+		if len(args) == 0 || args[0].Type() != js.TypeString {
+			return nil, errors.New("IRC message JSON is required")
+		}
+		if err := json.Unmarshal([]byte(args[0].String()), &cfg); err != nil {
+			return nil, err
+		}
+		return sendIRC(cfg)
 	}))
 	logLine("wasm", "bindings ready")
 	select {}
@@ -227,6 +274,110 @@ func runHTTPRequest(cfg requestConfig) (any, error) {
 		Headers:    headers,
 		Body:       string(body),
 	}, nil
+}
+
+func connectIRC(cfg ircConnectConfig) (any, error) {
+	mu.Lock()
+	n := node
+	if n == nil || n.vt == nil {
+		mu.Unlock()
+		return nil, errors.New("node is not running")
+	}
+	old := n.irc
+	n.irc = nil
+	mu.Unlock()
+	if old != nil {
+		_ = old.close()
+	}
+
+	cfg = normalizeIRCConnectConfig(cfg)
+	logLine("irc", fmt.Sprintf("connecting server=%s nick=%s", cfg.Server, cfg.Nick))
+	appendIRC("status", fmt.Sprintf("Connecting to %s as %s", cfg.Server, cfg.Nick))
+
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+	conn, err := n.vt.Dial(ctx, "tcp", cfg.Server)
+	if err != nil {
+		appendIRC("error", err.Error())
+		return nil, err
+	}
+
+	session := &ircSession{
+		client: irca.NewClient(conn),
+		server: cfg.Server,
+		nick:   cfg.Nick,
+	}
+	if err := session.client.Send(irca.Message{Command: "NICK", Params: []string{cfg.Nick}}); err != nil {
+		_ = session.close()
+		return nil, err
+	}
+	appendIRC("out", "/nick "+cfg.Nick)
+	if err := session.client.Send(irca.Message{Command: "USER", Params: []string{cfg.Username, "0", "*", cfg.Realname}}); err != nil {
+		_ = session.close()
+		return nil, err
+	}
+	appendIRC("out", "/user "+cfg.Username)
+	if err := sendNickServAuth(session, cfg); err != nil {
+		_ = session.close()
+		return nil, err
+	}
+	if cfg.Channel != "" {
+		if err := session.client.Send(irca.Message{Command: "JOIN", Params: []string{cfg.Channel}}); err != nil {
+			_ = session.close()
+			return nil, err
+		}
+		appendIRC("out", "/join "+cfg.Channel)
+	}
+
+	mu.Lock()
+	if node != n {
+		mu.Unlock()
+		_ = session.close()
+		return nil, errors.New("node stopped while connecting IRC")
+	}
+	n.irc = session
+	mu.Unlock()
+
+	go session.recvLoop()
+	appendIRC("status", fmt.Sprintf("Connected to %s", cfg.Server))
+	logLine("irc", fmt.Sprintf("connected server=%s nick=%s", cfg.Server, cfg.Nick))
+	return map[string]string{"server": cfg.Server, "nick": cfg.Nick}, nil
+}
+
+func disconnectIRC() error {
+	mu.Lock()
+	n := node
+	if n == nil || n.irc == nil {
+		mu.Unlock()
+		return nil
+	}
+	session := n.irc
+	n.irc = nil
+	mu.Unlock()
+	appendIRC("status", "Disconnected")
+	return session.close()
+}
+
+func sendIRC(cfg ircSendConfig) (any, error) {
+	mu.Lock()
+	n := node
+	if n == nil || n.irc == nil {
+		mu.Unlock()
+		return nil, errors.New("IRC is not connected")
+	}
+	session := n.irc
+	mu.Unlock()
+
+	msg, echo, err := buildIRCMessage(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := session.client.Send(msg); err != nil {
+		appendIRC("error", err.Error())
+		return nil, err
+	}
+	appendIRC("out", echo)
+	return map[string]string{"message": "sent"}, nil
 }
 
 func newBrowserNode(start startConfig) (*browserNode, error) {
@@ -380,6 +531,9 @@ func startAutoPeer(log autopeer.Logger, coreNode *core.Core, cfg startConfig) *a
 
 func (n *browserNode) close() error {
 	var errs []error
+	if n.irc != nil {
+		errs = append(errs, n.irc.close())
+	}
 	if n.autopeer != nil {
 		errs = append(errs, n.autopeer.Close())
 	}
@@ -396,6 +550,25 @@ func (n *browserNode) close() error {
 		n.core.Stop()
 	}
 	return errors.Join(errs...)
+}
+
+func (s *ircSession) close() error {
+	if s == nil || s.client == nil {
+		return nil
+	}
+	return s.client.Close()
+}
+
+func (s *ircSession) recvLoop() {
+	for {
+		msg, err := s.client.Recv()
+		if err != nil {
+			appendIRC("status", fmt.Sprintf("Connection closed: %v", err))
+			logLine("irc", fmt.Sprintf("receive stopped server=%s error=%v", s.server, err))
+			return
+		}
+		appendIRC("in", formatIRCMessage(msg))
+	}
 }
 
 func (n *browserNode) state() appState {
@@ -460,6 +633,160 @@ func applyHeaders(req *http.Request, raw string) error {
 		req.Header.Add(strings.TrimSpace(name), strings.TrimSpace(value))
 	}
 	return nil
+}
+
+func normalizeIRCConnectConfig(cfg ircConnectConfig) ircConnectConfig {
+	cfg.Server = strings.TrimSpace(cfg.Server)
+	if cfg.Server == "" {
+		cfg.Server = defaultIRCServer
+	}
+	cfg.Nick = strings.TrimSpace(cfg.Nick)
+	if cfg.Nick == "" {
+		cfg.Nick = fmt.Sprintf("yggweb%d", time.Now().Unix()%10000)
+	}
+	cfg.Username = strings.TrimSpace(cfg.Username)
+	if cfg.Username == "" {
+		cfg.Username = "yggweb"
+	}
+	cfg.Realname = strings.TrimSpace(cfg.Realname)
+	if cfg.Realname == "" {
+		cfg.Realname = "Yggdrasil Web IRC"
+	}
+	cfg.Channel = strings.TrimSpace(cfg.Channel)
+	cfg.NickServMode = strings.ToLower(strings.TrimSpace(cfg.NickServMode))
+	cfg.NickServPassword = strings.TrimSpace(cfg.NickServPassword)
+	cfg.NickServEmail = strings.TrimSpace(cfg.NickServEmail)
+	return cfg
+}
+
+func sendNickServAuth(session *ircSession, cfg ircConnectConfig) error {
+	switch cfg.NickServMode {
+	case "", "none":
+		return nil
+	case "login":
+		if cfg.NickServPassword == "" {
+			return errors.New("NickServ login requires a password")
+		}
+		msg := irca.Message{Command: "PRIVMSG", Params: []string{"NickServ", "IDENTIFY " + cfg.NickServPassword}}
+		if err := session.client.Send(msg); err != nil {
+			return err
+		}
+		appendIRC("out", "NickServ IDENTIFY ********")
+		return nil
+	case "register":
+		if cfg.NickServPassword == "" {
+			return errors.New("NickServ registration requires a password")
+		}
+		params := "REGISTER " + cfg.NickServPassword
+		echo := "NickServ REGISTER ********"
+		if cfg.NickServEmail != "" {
+			params += " " + cfg.NickServEmail
+			echo += " " + cfg.NickServEmail
+		}
+		msg := irca.Message{Command: "PRIVMSG", Params: []string{"NickServ", params}}
+		if err := session.client.Send(msg); err != nil {
+			return err
+		}
+		appendIRC("out", echo)
+		return nil
+	default:
+		return fmt.Errorf("unknown NickServ mode %q", cfg.NickServMode)
+	}
+}
+
+func buildIRCMessage(cfg ircSendConfig) (irca.Message, string, error) {
+	text := strings.TrimSpace(cfg.Text)
+	if text == "" {
+		return irca.Message{}, "", errors.New("message is required")
+	}
+	if strings.HasPrefix(text, "/") {
+		msg, echo, err := parseIRCCommand(text[1:])
+		return msg, echo, err
+	}
+	target := strings.TrimSpace(cfg.Target)
+	if target == "" {
+		return irca.Message{}, "", errors.New("target is required for regular chat messages")
+	}
+	return irca.Message{Command: "PRIVMSG", Params: []string{target, text}}, fmt.Sprintf("<me:%s> %s", target, text), nil
+}
+
+func parseIRCCommand(raw string) (irca.Message, string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return irca.Message{}, "", errors.New("IRC command is required")
+	}
+	command, rest, _ := strings.Cut(raw, " ")
+	command = strings.ToUpper(strings.TrimSpace(command))
+	rest = strings.TrimSpace(rest)
+	switch command {
+	case "JOIN":
+		if rest == "" {
+			return irca.Message{}, "", errors.New("/join requires a channel")
+		}
+		return irca.Message{Command: "JOIN", Params: []string{rest}}, "/join " + rest, nil
+	case "PART":
+		if rest == "" {
+			return irca.Message{}, "", errors.New("/part requires a channel")
+		}
+		return irca.Message{Command: "PART", Params: []string{rest}}, "/part " + rest, nil
+	case "NICK":
+		if rest == "" {
+			return irca.Message{}, "", errors.New("/nick requires a nickname")
+		}
+		return irca.Message{Command: "NICK", Params: []string{rest}}, "/nick " + rest, nil
+	case "MSG":
+		target, text, ok := strings.Cut(rest, " ")
+		if !ok || strings.TrimSpace(target) == "" || strings.TrimSpace(text) == "" {
+			return irca.Message{}, "", errors.New("/msg requires a target and message")
+		}
+		text = strings.TrimSpace(text)
+		return irca.Message{Command: "PRIVMSG", Params: []string{target, text}}, fmt.Sprintf("<me:%s> %s", target, text), nil
+	case "ME":
+		target, text, ok := strings.Cut(rest, " ")
+		if !ok || strings.TrimSpace(target) == "" || strings.TrimSpace(text) == "" {
+			return irca.Message{}, "", errors.New("/me requires a target and action")
+		}
+		text = strings.TrimSpace(text)
+		return irca.Message{Command: "PRIVMSG", Params: []string{target, "\x01ACTION " + text + "\x01"}}, fmt.Sprintf("* me:%s %s", target, text), nil
+	case "QUIT":
+		if rest == "" {
+			rest = "leaving"
+		}
+		return irca.Message{Command: "QUIT", Params: []string{rest}}, "/quit " + rest, nil
+	default:
+		if rest == "" {
+			return irca.Message{Command: command}, "/" + command, nil
+		}
+		msg, err := irca.ParseMessage(command + " " + rest)
+		if err != nil {
+			return irca.Message{}, "", err
+		}
+		return msg, "/" + command + " " + rest, nil
+	}
+}
+
+func formatIRCMessage(msg irca.Message) string {
+	var b strings.Builder
+	if msg.Prefix != "" {
+		b.WriteByte('[')
+		b.WriteString(msg.Prefix)
+		b.WriteString("] ")
+	}
+	b.WriteString(msg.Command)
+	if len(msg.Params) > 0 {
+		b.WriteByte(' ')
+		b.WriteString(strings.Join(msg.Params, " "))
+	}
+	return b.String()
+}
+
+func appendIRC(kind, message string) {
+	appendFn := js.Global().Get("yggDemoAppendIRC")
+	if appendFn.Type() == js.TypeFunction {
+		appendFn.Invoke(kind, time.Now().Format("15:04:05"), message)
+		return
+	}
+	logLine("irc", message)
 }
 
 func splitList(raw string) []string {

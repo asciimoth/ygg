@@ -1,8 +1,22 @@
 let wasmReady = false;
 let nodeRunning = false;
+let ircConnected = false;
 
 const statusEl = document.getElementById('runtimeStatus');
 const responseEl = document.getElementById('response');
+
+function randomIRCName(prefix) {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${prefix}${suffix}`;
+}
+
+function setRandomIRCIdentity() {
+  const nick = randomIRCName('ygg');
+  document.getElementById('ircNick').value = nick;
+  document.getElementById('ircUsername').value = randomIRCName('web');
+}
 
 function appendLog(line) {
   const logs = document.getElementById('logs');
@@ -18,6 +32,28 @@ function appendLog(line) {
 
 window.yggDemoAppendLog = appendLog;
 
+function appendIRC(kind, at, line) {
+  const chat = document.getElementById('ircMessages');
+  if (!chat) {
+    return;
+  }
+  const atBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 8;
+  const row = document.createElement('div');
+  row.className = `irc-line irc-${kind || 'in'}`;
+  const time = document.createElement('span');
+  time.className = 'irc-time';
+  time.textContent = at || '';
+  const text = document.createElement('span');
+  text.textContent = line || '';
+  row.append(time, text);
+  chat.append(row);
+  if (atBottom) {
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+
+window.yggDemoAppendIRC = appendIRC;
+
 function setStatus(kind, text) {
   statusEl.className = `status ${kind}`;
   statusEl.textContent = text;
@@ -28,6 +64,9 @@ function syncButtons() {
   document.getElementById('stopNode').disabled = !wasmReady || !nodeRunning;
   document.getElementById('refreshState').disabled = !wasmReady || !nodeRunning;
   document.getElementById('runRequest').disabled = !wasmReady || !nodeRunning;
+  document.getElementById('ircConnect').disabled = !wasmReady || !nodeRunning;
+  document.getElementById('ircDisconnect').disabled = !wasmReady || !nodeRunning || !ircConnected;
+  document.getElementById('ircSend').disabled = !wasmReady || !nodeRunning || !ircConnected;
 }
 
 function startConfig() {
@@ -45,6 +84,26 @@ function requestConfig() {
     url: document.getElementById('requestUrl').value.trim(),
     headers: document.getElementById('headers').value,
     body: document.getElementById('body').value,
+  };
+}
+
+function ircConnectConfig() {
+  return {
+    server: document.getElementById('ircServer').value.trim(),
+    nick: document.getElementById('ircNick').value.trim(),
+    username: document.getElementById('ircUsername').value.trim(),
+    realname: document.getElementById('ircRealname').value.trim(),
+    channel: document.getElementById('ircChannel').value.trim(),
+    nickServMode: document.getElementById('nickServMode').value,
+    nickServPassword: document.getElementById('nickServPassword').value,
+    nickServEmail: document.getElementById('nickServEmail').value.trim(),
+  };
+}
+
+function ircSendConfig() {
+  return {
+    target: document.getElementById('ircTarget').value.trim(),
+    text: document.getElementById('ircText').value,
   };
 }
 
@@ -109,6 +168,7 @@ async function stopNode() {
     await yggDemoStop();
   } finally {
     nodeRunning = false;
+    ircConnected = false;
     renderState({ peers: [] });
     document.getElementById('address').textContent = '-';
     document.getElementById('subnet').textContent = '-';
@@ -149,9 +209,66 @@ async function runRequest() {
   }
 }
 
+async function connectIRC() {
+  setStatus('loading', 'Connecting IRC');
+  syncButtons();
+  try {
+    await yggDemoIRCConnect(JSON.stringify(ircConnectConfig()));
+    ircConnected = true;
+    setStatus('success', 'IRC connected');
+    await refreshState();
+  } catch (error) {
+    ircConnected = false;
+    appendIRC('error', new Date().toLocaleTimeString(), `Error: ${error.message || error}`);
+    setStatus('error', `IRC failed: ${error.message || error}`);
+  }
+  syncButtons();
+}
+
+async function disconnectIRC() {
+  try {
+    await yggDemoIRCDisconnect();
+  } finally {
+    ircConnected = false;
+    setStatus('ready', nodeRunning ? 'Node running' : 'Stopped');
+    syncButtons();
+  }
+}
+
+async function sendIRC() {
+  const text = document.getElementById('ircText');
+  try {
+    await yggDemoIRCSend(JSON.stringify(ircSendConfig()));
+    text.value = '';
+  } catch (error) {
+    appendIRC('error', new Date().toLocaleTimeString(), `Error: ${error.message || error}`);
+    setStatus('error', `IRC send failed: ${error.message || error}`);
+  }
+}
+
+function syncNickServFields() {
+  const mode = document.getElementById('nickServMode').value;
+  document.getElementById('nickServPassword').disabled = mode === 'none';
+  document.getElementById('nickServEmailLabel').classList.toggle('hidden', mode !== 'register');
+}
+
+setRandomIRCIdentity();
+syncNickServFields();
 document.getElementById('startNode').addEventListener('click', startNode);
 document.getElementById('stopNode').addEventListener('click', stopNode);
 document.getElementById('refreshState').addEventListener('click', refreshState);
 document.getElementById('runRequest').addEventListener('click', runRequest);
+document.getElementById('ircConnect').addEventListener('click', connectIRC);
+document.getElementById('ircDisconnect').addEventListener('click', disconnectIRC);
+document.getElementById('ircSend').addEventListener('click', sendIRC);
+document.getElementById('nickServMode').addEventListener('change', syncNickServFields);
+document.getElementById('ircText').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    if (!document.getElementById('ircSend').disabled) {
+      sendIRC();
+    }
+  }
+});
 syncButtons();
 loadWasm();

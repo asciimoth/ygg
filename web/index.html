@@ -87,6 +87,72 @@
             <textarea id="body"></textarea>
           </label>
           <button id="runRequest" disabled>Run Request</button>
+          <h2 class="subheading">Response</h2>
+          <pre id="response"></pre>
+        </div>
+
+        <div class="panel">
+          <h2>IRC over VTun</h2>
+          <label>
+            Server
+            <input id="ircServer" value="[324:71e:281a:9ed3::41]:6667" placeholder="[300:...]:6667">
+          </label>
+          <div class="split">
+            <label>
+              Nick
+              <input id="ircNick" maxlength="32">
+            </label>
+            <label>
+              Channel
+              <input id="ircChannel" placeholder="#channel">
+            </label>
+          </div>
+          <div class="split">
+            <label>
+              Username
+              <input id="ircUsername" maxlength="32">
+            </label>
+            <label>
+              Real name
+              <input id="ircRealname" value="Yggdrasil Web IRC">
+            </label>
+          </div>
+          <div class="split nickserv-row">
+            <label>
+              NickServ
+              <select id="nickServMode">
+                <option value="none">None</option>
+                <option value="login">Login</option>
+                <option value="register">Register</option>
+              </select>
+            </label>
+            <label>
+              Password
+              <input id="nickServPassword" type="password" autocomplete="current-password">
+            </label>
+          </div>
+          <label id="nickServEmailLabel" class="hidden">
+            Email
+            <input id="nickServEmail" type="email" autocomplete="email">
+          </label>
+          <p class="note">
+            ILITA IRC is suggested by default. Other services hosted inside Yggdrasil are listed at
+            <a href="https://yggdrasil-network.github.io/services.html">yggdrasil-network.github.io</a>.
+          </p>
+          <div class="actions two">
+            <button id="ircConnect" disabled>Connect</button>
+            <button id="ircDisconnect" disabled>Disconnect</button>
+          </div>
+          <label>
+            Target
+            <input id="ircTarget" placeholder="#channel or nick">
+          </label>
+          <div id="ircMessages" class="irc-messages"></div>
+          <label>
+            Message
+            <textarea id="ircText" placeholder="Message, or /join #channel, /msg nick text, /nick name"></textarea>
+          </label>
+          <button id="ircSend" disabled>Send</button>
         </div>
       </section>
 
@@ -100,11 +166,6 @@
             <tr><td colspan="4">No peers yet.</td></tr>
           </tbody>
         </table>
-      </section>
-
-      <section class="panel">
-        <h2>Response</h2>
-        <pre id="response"></pre>
       </section>
 
       <section class="panel">

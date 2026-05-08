@@ -34,6 +34,10 @@ h2 {
   font-size: 18px;
 }
 
+.subheading {
+  margin-top: 18px;
+}
+
 .topbar {
   display: flex;
   align-items: flex-start;
@@ -75,6 +79,10 @@ label {
   color: #5e6b78;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.hidden {
+  display: none;
 }
 
 input,
@@ -120,6 +128,17 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 14px;
+}
+
+.actions.two,
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nickserv-row {
+  align-items: end;
 }
 
 .status {
@@ -182,7 +201,8 @@ td {
 }
 
 pre,
-.logs {
+.logs,
+.irc-messages {
   min-height: 180px;
   margin: 12px 0 0;
   padding: 12px;
@@ -200,6 +220,36 @@ pre,
   white-space: pre-wrap;
 }
 
+.irc-messages {
+  height: 260px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.irc-line {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.irc-time {
+  color: #94a3b8;
+}
+
+.irc-line.irc-out {
+  color: #b8f7d4;
+}
+
+.irc-line.irc-status {
+  color: #f7e6a7;
+}
+
+.irc-line.irc-error {
+  color: #ffb4b4;
+}
+
 @media (max-width: 760px) {
   main {
     width: min(100vw - 20px, 1180px);
@@ -208,7 +258,9 @@ pre,
 
   .topbar,
   .grid,
-  .actions {
+  .actions,
+  .actions.two,
+  .split {
     grid-template-columns: 1fr;
     display: grid;
   }

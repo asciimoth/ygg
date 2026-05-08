@@ -87,10 +87,10 @@ run-web-peer-autopeer:
 	ws_peer_url="${WS_PEER_URL:-ws://127.0.0.1:${ws_port}}"; \
 	countries="$(jq -r '[.peers[].country] | unique | join(",")' ygglib/autopeer/builtin_peers_generated.json)"; \
 	go run ./yggd/yggd -genconf -json \
-		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg admin_web "${ADMIN_WEB_LISTEN:-127.0.0.1:9003}" --arg ws_listen "ws://${ws_listen}?origin=*" --arg countries "${countries}" --arg schemes "${AUTOPEER_SCHEMES:-tls,tcp,quic,ws}" '.AdminListen = $admin | .AdminWebListen = $admin_web | .TunType = "none" | .IfName = "none" | .Listen = [$ws_listen] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ($schemes | split(",") | map(gsub("^ +| +$"; "") | select(. != "")))' \
+		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9004}" --arg admin_web "${ADMIN_WEB_LISTEN:-127.0.0.1:9005}" --arg ws_listen "ws://${ws_listen}?origin=*" --arg countries "${countries}" --arg schemes "${AUTOPEER_SCHEMES:-tls,tcp,quic,ws}" '.AdminListen = $admin | .AdminWebListen = $admin_web | .TunType = "none" | .IfName = "none" | .Listen = [$ws_listen] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ($schemes | split(",") | map(gsub("^ +| +$"; "") | select(. != "")))' \
 		>"${cfg}"; \
 	echo "Admin: ${ADMIN_LISTEN:-tcp://localhost:9001}"; \
-	echo "Admin web: http://${ADMIN_WEB_LISTEN:-127.0.0.1:9003}/"; \
+	echo "Admin web: http://${ADMIN_WEB_LISTEN:-127.0.0.1:9005}/"; \
 	echo "WebSocket listener: ws://${ws_listen}?origin=*"; \
 	echo "Web demo manual peer: ${ws_peer_url}"; \
 	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
