@@ -299,7 +299,7 @@ NixOS users can import the module:
 ```
 
 ### Deb, and rpm-based systems
-Packages are published to my deb/rpm repository:
+Packages are published to [my deb/rpm repository](https://repo.moth.contact):
 
 Setup it for your sytstem via script (or manually):
 ```sh
