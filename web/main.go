@@ -43,7 +43,6 @@ type startConfig struct {
 	ManualPeers      string `json:"manualPeers"`
 	Countries        string `json:"countries"`
 	TransportSchemes string `json:"transportSchemes"`
-	RelayURL         string `json:"relayUrl"`
 }
 
 type requestConfig struct {
@@ -83,7 +82,6 @@ type browserNode struct {
 
 type browserWebSocketTransport struct {
 	schemes []string
-	relay   string
 }
 
 type jsLogger struct{}
@@ -99,7 +97,6 @@ func main() {
 		cfg := startConfig{
 			Countries:        defaultCountries,
 			TransportSchemes: defaultSchemes,
-			RelayURL:         "/ygg-peer",
 		}
 		if len(args) > 0 && args[0].Type() == js.TypeString {
 			if err := json.Unmarshal([]byte(args[0].String()), &cfg); err != nil {
@@ -234,7 +231,7 @@ func newBrowserNode(start startConfig) (*browserNode, error) {
 	}
 	logLine("app", "generated ephemeral node certificate")
 
-	manager, err := newTransportManager(start.RelayURL)
+	manager, err := newTransportManager()
 	if err != nil {
 		return nil, err
 	}
@@ -279,11 +276,11 @@ func newBrowserNode(start startConfig) (*browserNode, error) {
 	return n, nil
 }
 
-func newTransportManager(relay string) (*transport.Manager, error) {
+func newTransportManager() (*transport.Manager, error) {
 	manager := transport.NewManager(&reject.Network{})
 	for _, t := range []transport.Transport{
-		&browserWebSocketTransport{schemes: []string{"ws"}, relay: relay},
-		&browserWebSocketTransport{schemes: []string{"wss"}, relay: relay},
+		&browserWebSocketTransport{schemes: []string{"ws"}},
+		&browserWebSocketTransport{schemes: []string{"wss"}},
 	} {
 		if err := manager.RegisterTransport(t); err != nil {
 			return nil, fmt.Errorf("register websocket transport: %w", err)
@@ -407,16 +404,7 @@ func (t *browserWebSocketTransport) Dial(
 	_ transport.Options,
 ) (transport.Conn, error) {
 	target := u.String()
-	if strings.TrimSpace(t.relay) != "" {
-		relayURL, err := browserRelayURL(t.relay, target)
-		if err != nil {
-			return nil, err
-		}
-		logLine("transport", fmt.Sprintf("dial relay=%s target=%s", relayURL, target))
-		target = relayURL
-	} else {
-		logLine("transport", "dial direct "+target)
-	}
+	logLine("transport", "dial direct "+target)
 
 	wsconn, _, err := websocket.Dial(ctx, target, &websocket.DialOptions{
 		Subprotocols: []string{websocketSubprotocol},
@@ -425,38 +413,6 @@ func (t *browserWebSocketTransport) Dial(
 		return nil, err
 	}
 	return websocket.NetConn(ctx, wsconn, websocket.MessageBinary), nil
-}
-
-func browserRelayURL(relay, target string) (string, error) {
-	relay = strings.TrimSpace(relay)
-	if relay == "" {
-		return target, nil
-	}
-	if strings.HasPrefix(relay, "/") {
-		location := js.Global().Get("location")
-		protocol := "ws:"
-		if location.Get("protocol").String() == "https:" {
-			protocol = "wss:"
-		}
-		relay = protocol + "//" + location.Get("host").String() + relay
-	}
-	u, err := url.Parse(relay)
-	if err != nil {
-		return "", fmt.Errorf("parse relay url: %w", err)
-	}
-	switch u.Scheme {
-	case "http":
-		u.Scheme = "ws"
-	case "https":
-		u.Scheme = "wss"
-	case "ws", "wss":
-	default:
-		return "", fmt.Errorf("unsupported relay scheme %q", u.Scheme)
-	}
-	q := u.Query()
-	q.Set("target", target)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
 }
 
 func (t *browserWebSocketTransport) Listen(

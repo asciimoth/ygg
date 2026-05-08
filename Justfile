@@ -76,6 +76,25 @@ run-sockstun-autopeer:
 	echo "resolve: tor-resolve myip.ygg ${SOCKS_LISTEN:-127.0.0.1:1080}"; \
 	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
 
+# Run a temporary no-TUN daemon with global built-in autopeering and a browser-friendly WebSocket listener.
+# Override with WS_LISTEN=0.0.0.0:8082 WS_PEER_URL=ws://127.0.0.1:8082 ADMIN_LISTEN=tcp://localhost:9002 ADMIN_WEB_LISTEN=127.0.0.1:9003 AUTOPEER_SCHEMES=tls,tcp,quic,ws LOGLEVEL=debug.
+run-web-peer-autopeer:
+	@tmpdir="$(mktemp -d)"; \
+	trap 'rm -rf "${tmpdir}"' EXIT; \
+	cfg="${tmpdir}/ygg.json"; \
+	ws_listen="${WS_LISTEN:-0.0.0.0:8081}"; \
+	ws_port="${ws_listen##*:}"; \
+	ws_peer_url="${WS_PEER_URL:-ws://127.0.0.1:${ws_port}}"; \
+	countries="$(jq -r '[.peers[].country] | unique | join(",")' ygglib/autopeer/builtin_peers_generated.json)"; \
+	go run ./yggd/yggd -genconf -json \
+		| jq --arg admin "${ADMIN_LISTEN:-tcp://localhost:9001}" --arg admin_web "${ADMIN_WEB_LISTEN:-127.0.0.1:9003}" --arg ws_listen "ws://${ws_listen}?origin=*" --arg countries "${countries}" --arg schemes "${AUTOPEER_SCHEMES:-tls,tcp,quic,ws}" '.AdminListen = $admin | .AdminWebListen = $admin_web | .TunType = "none" | .IfName = "none" | .Listen = [$ws_listen] | .Peers = [] | .InterfacePeers = {} | .MulticastInterfaces = [] | .AutoPeer.Enabled = true | .AutoPeer.Sources = ["BUILTIN"] | .AutoPeer.FetchInterval = "1h" | .AutoPeer.CheckInterval = "5s" | .AutoPeer.MinimumConnected = 1 | .AutoPeer.MinimumConnectedFromFetch = 1 | .AutoPeer.Countries = ($countries | split(",") | map(select(. != ""))) | .AutoPeer.TransportSchemes = ($schemes | split(",") | map(gsub("^ +| +$"; "") | select(. != "")))' \
+		>"${cfg}"; \
+	echo "Admin: ${ADMIN_LISTEN:-tcp://localhost:9001}"; \
+	echo "Admin web: http://${ADMIN_WEB_LISTEN:-127.0.0.1:9003}/"; \
+	echo "WebSocket listener: ws://${ws_listen}?origin=*"; \
+	echo "Web demo manual peer: ${ws_peer_url}"; \
+	go run ./yggd/yggd -useconffile "${cfg}" -logto stdout -loglevel "${LOGLEVEL:-info}"
+
 run:
   rm ./ygg
   go build -o ygg ./yggd/yggd

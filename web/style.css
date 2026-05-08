@@ -70,6 +70,13 @@ label {
   color: #3f4b57;
 }
 
+.note {
+  margin-top: 14px;
+  color: #5e6b78;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 input,
 select,
 textarea,

@@ -21,20 +21,25 @@
           <h2>Node</h2>
           <label>
             Autopeer countries
-            <input id="countries" value="finland,germany,hungary,netherlands,russia,united-states">
+            <input id="countries" value="finland,germany,netherlands">
           </label>
           <label>
             Autopeer schemes
             <input id="schemes" value="wss">
           </label>
           <label>
-            WebSocket relay
-            <input id="relayUrl" value="/ygg-peer">
-          </label>
-          <label>
             Manual peer URLs
             <textarea id="manualPeers" placeholder="wss://host:port"></textarea>
           </label>
+          <p class="note">
+            This browser demo can only connect to peers that accept
+            <a href="https://github.com/yggdrasil-network/yggdrasil-go/pull/1342">cross-origin WebSocket requests</a>
+            from this page. And for now (08.05.2026) most of
+            <a href="https://publicpeers.neilalexander.dev/">public peers</a>
+            reject any cross-origin.
+            You can manually run suitable peer using <code>just run-web-peer-autopeer</code> from
+            <a href="https://github.com/asciimoth/ygg">ygg repo</a>.
+          </p>
           <div class="actions">
             <button id="startNode">Start Node</button>
             <button id="stopNode" disabled>Stop Node</button>

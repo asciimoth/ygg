@@ -593,8 +593,7 @@ It:
   UI-selected countries and WebSocket schemes
 - accepts optional manual `ws://` or `wss://` peer URLs from the UI
 - runs browser-initiated HTTP requests through the VTun dialer
-- includes `web/server`, a local static-file server with a same-origin
-  WebSocket relay at `/ygg-peer`
+- includes `web/server`, a local static-file server
 
 On `GOOS=js GOARCH=wasm`, `github.com/coder/websocket.Dial` uses the host
 JavaScript WebSocket API. The web transport therefore ignores the
@@ -602,12 +601,10 @@ JavaScript WebSocket API. The web transport therefore ignores the
 network exists only to satisfy the manager contract and to make accidental
 native carrier use fail closed.
 
-When configured with the default `/ygg-peer` relay, browser WebSocket dials are
-rewritten to the local same-origin relay with the original peer URL in the
-`target` query parameter. The relay then dials the public peer from Go and
-copies bytes in both directions. This avoids browser-only restrictions such as
-mandatory `Origin` headers on cross-site WebSocket handshakes while preserving
-the Core-facing peer URI.
+Browser WebSocket dials go directly to the configured `ws://` or `wss://` peer.
+Browsers always send an `Origin` header on cross-origin WebSocket handshakes, so
+the web demo can only connect to peers that accept cross-origin requests from
+the page hosting the demo.
 
 ## Main Runtime Interfaces
 
