@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/mnlib"
 	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/miekg/dns"
@@ -103,7 +102,7 @@ func localDNSNetwork(controller *daemonTunController) gonnect.Network {
 			return active.Network()
 		}
 	}
-	return native.Config{}.Build()
+	return gonnect.NativeConfig{}.Build()
 }
 
 func (s *localDNSServer) handleDNS(w dns.ResponseWriter, req *dns.Msg) {

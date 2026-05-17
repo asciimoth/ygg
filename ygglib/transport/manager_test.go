@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/loopback"
 )
 
 func TestManagerRegisterAndDialErrors(t *testing.T) {
@@ -168,14 +167,14 @@ func TestManagerNetworkSelectionAndNilMappings(t *testing.T) {
 func TestManagerMappingChangesCloseResources(t *testing.T) {
 	t.Parallel()
 
-	m := newLoopbackManager(t, loopback.NewLoopbackNetwok())
+	m := newLoopbackManager(t, gonnect.NewLoopbackNetwok())
 	listener, client, server := openManagedPair(t, m, "tcp://127.0.0.1:0")
 
 	if got := resourceCount(m); got != 3 {
 		t.Fatalf("unexpected resource count before remap: %d", got)
 	}
 
-	if err := m.MapNetwork("127.0.0.1", loopback.NewLoopbackNetwok()); err != nil {
+	if err := m.MapNetwork("127.0.0.1", gonnect.NewLoopbackNetwok()); err != nil {
 		t.Fatalf("map network: %v", err)
 	}
 	waitForResourceCount(t, m, 0)
@@ -190,7 +189,7 @@ func TestManagerMappingChangesCloseResources(t *testing.T) {
 func TestManagerUnmapAndCloseCloseMappedResources(t *testing.T) {
 	t.Parallel()
 
-	netw := loopback.NewLoopbackNetwok()
+	netw := gonnect.NewLoopbackNetwok()
 	m := newLoopbackManager(t, nil)
 	if err := m.MapNetwork("127.0.0.1", netw); err != nil {
 		t.Fatalf("map network: %v", err)
@@ -208,7 +207,7 @@ func TestManagerUnmapAndCloseCloseMappedResources(t *testing.T) {
 	assertClosed(t, client)
 	assertClosed(t, server)
 
-	m = newLoopbackManager(t, loopback.NewLoopbackNetwok())
+	m = newLoopbackManager(t, gonnect.NewLoopbackNetwok())
 	_, client, server = openManagedPair(t, m, "tcp://127.0.0.1:0")
 	if err := m.Close(); err != nil {
 		t.Fatalf("close manager: %v", err)
@@ -221,9 +220,9 @@ func TestManagerUnmapAndCloseCloseMappedResources(t *testing.T) {
 func TestManagerSetDefaultNetworkClosesDefaultResources(t *testing.T) {
 	t.Parallel()
 
-	m := newLoopbackManager(t, loopback.NewLoopbackNetwok())
+	m := newLoopbackManager(t, gonnect.NewLoopbackNetwok())
 	_, client, server := openManagedPair(t, m, "tcp://127.0.0.1:0")
-	m.SetDefaultNetwork(loopback.NewLoopbackNetwok())
+	m.SetDefaultNetwork(gonnect.NewLoopbackNetwok())
 	waitForResourceCount(t, m, 0)
 	assertClosed(t, client)
 	assertClosed(t, server)
@@ -576,7 +575,7 @@ func TestTrackedListenerAcceptErrorAndChildAfterParentClose(t *testing.T) {
 		t.Fatalf("expected net.ErrClosed from accept, got %v", err)
 	}
 
-	m := newLoopbackManager(t, loopback.NewLoopbackNetwok())
+	m := newLoopbackManager(t, gonnect.NewLoopbackNetwok())
 	listener, _, server := openManagedPair(t, m, "tcp://127.0.0.1:0")
 	if err := listener.Close(); err != nil {
 		t.Fatalf("close listener: %v", err)
@@ -590,7 +589,7 @@ func TestTrackedListenerAcceptErrorAndChildAfterParentClose(t *testing.T) {
 func TestTCPTransportRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	network := loopback.NewLoopbackNetwok()
+	network := gonnect.NewLoopbackNetwok()
 	transport := NewTCPTransport()
 	ln, err := transport.Listen(context.Background(), network, mustParseURL(t, "tcp://127.0.0.1:0"), Options{})
 	if err != nil {
@@ -639,7 +638,7 @@ func TestTLSTransportRoundTripAndSNI(t *testing.T) {
 	t.Parallel()
 
 	cert := mustSelfSignedCert(t)
-	network := loopback.NewLoopbackNetwok()
+	network := gonnect.NewLoopbackNetwok()
 
 	serverTransport := NewTLSTransport(&tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -696,7 +695,7 @@ func TestTLSTransportSchemesAndHostFallback(t *testing.T) {
 	t.Parallel()
 
 	cert := mustSelfSignedCert(t)
-	network := loopback.NewLoopbackNetwok()
+	network := gonnect.NewLoopbackNetwok()
 	serverTransport := NewTLSTransport(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
@@ -930,6 +929,8 @@ func (t *stubTransport) Listen(
 }
 
 type stubNetwork struct {
+	*gonnect.RejectNetwork
+
 	name     string
 	native   bool
 	dialFn   func(context.Context, string, string) (net.Conn, error)

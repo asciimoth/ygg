@@ -20,7 +20,7 @@ func (m *Multicast) InterfaceStates() []InterfaceState {
 	phony.Block(m, func() {
 		for name, intf := range m._interfaces {
 			is := InterfaceState{
-				Name:     intf.iface.Name,
+				Name:     intf.iface.Name(),
 				Beacon:   intf.beacon,
 				Listen:   intf.listen,
 				Password: len(intf.password) > 0,

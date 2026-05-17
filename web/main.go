@@ -21,7 +21,6 @@ import (
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
-	"github.com/asciimoth/gonnect/reject"
 	"github.com/asciimoth/irca"
 	"github.com/asciimoth/mnlib"
 	"github.com/coder/websocket"
@@ -433,7 +432,7 @@ func newBrowserNode(start startConfig) (*browserNode, error) {
 }
 
 func newTransportManager() (*transport.Manager, error) {
-	manager := transport.NewManager(&reject.Network{})
+	manager := transport.NewManager(&gonnect.RejectNetwork{})
 	for _, t := range []transport.Transport{
 		&browserWebSocketTransport{schemes: []string{"ws"}},
 		&browserWebSocketTransport{schemes: []string{"wss"}},

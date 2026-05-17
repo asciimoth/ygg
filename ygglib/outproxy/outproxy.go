@@ -13,7 +13,6 @@ import (
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
-	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/socksgo"
 	"github.com/asciimoth/socksgo/protocol"
 )
@@ -78,7 +77,7 @@ func Create(cfg Config) (*Tun, error) {
 		return nil, fmt.Errorf("build VTun: %w", err)
 	}
 
-	outbound := native.Config{}.Build()
+	outbound := gonnect.NativeConfig{}.Build()
 
 	network, err := newRouteNetwork(outbound, cfg.Proxies, cfg.DefaultProxyURL, cfg.Log)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/asciimoth/gonnect/native"
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/transport"
 )
@@ -100,7 +100,7 @@ func newCompatNodes(t *testing.T) (*Core, *Core) {
 func newCompatManager(t *testing.T, scheme string, tlsConfig *tls.Config) *transport.Manager {
 	t.Helper()
 
-	network := &native.Network{}
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 	require_NoError(t, network.Up())
 
 	manager := transport.NewManager(network)

@@ -224,6 +224,8 @@ func TestIsYggdrasilAddressIncludesNodeAndSubnetRanges(t *testing.T) {
 }
 
 type recordNetwork struct {
+	*gonnect.RejectNetwork
+
 	lastNetwork string
 	lastAddress string
 	resolverIPs []net.IP

@@ -20,8 +20,6 @@ import (
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
-	"github.com/asciimoth/gonnect/loopback"
-	"github.com/asciimoth/gonnect/native"
 
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
@@ -174,18 +172,18 @@ type node struct {
 func newTransportNetworks(mode string) (transportExampleNetwork, transportExampleNetwork, func() error, error) {
 	switch mode {
 	case "native":
-		left := &native.Network{}
+		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := left.Up(); err != nil {
 			return nil, nil, nil, fmt.Errorf("bring left transport network up: %w", err)
 		}
-		right := &native.Network{}
+		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := right.Up(); err != nil {
 			_ = left.Down()
 			return nil, nil, nil, fmt.Errorf("bring right transport network up: %w", err)
 		}
 		return left, right, nil, nil
 	case "loopback":
-		shared := loopback.NewLoopbackNetwok()
+		shared := gonnect.NewLoopbackNetwok()
 		if err := shared.Up(); err != nil {
 			return nil, nil, nil, fmt.Errorf("bring shared transport network up: %w", err)
 		}

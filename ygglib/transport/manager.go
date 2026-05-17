@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/native"
 )
 
 const defaultMappingKey = ""
@@ -595,7 +594,7 @@ func closeAll(closers []io.Closer) {
 func NewBuiltinNetwork(kind string) (Network, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case NetworkKindNative:
-		network := &native.Network{}
+		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := network.Up(); err != nil {
 			return nil, err
 		}
@@ -606,12 +605,13 @@ func NewBuiltinNetwork(kind string) (Network, error) {
 }
 
 func BuiltinNetworkName(network Network) (string, bool) {
-	switch network.(type) {
-	case *native.Network:
+	if _, ok := network.(*gonnect.NativeNetwork); ok {
 		return NetworkKindNative, true
-	default:
-		return "", false
 	}
+	if _, ok := gonnect.GetWrapped(network).(*gonnect.NativeNetwork); ok {
+		return NetworkKindNative, true
+	}
+	return "", false
 }
 
 func normalizeScheme(scheme string) string {

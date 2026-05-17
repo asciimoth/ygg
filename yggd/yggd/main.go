@@ -258,13 +258,15 @@ func main() {
 
 	n := &node{}
 	var tunController *daemonTunController
+	var defaultNetwork transport.Network
 
 	// Set up the Yggdrasil node itself.
 	{
-		manager, defaultNetwork, err := newTransportManager(cfg)
+		manager, defaultNet, err := newTransportManager(cfg)
 		if err != nil {
 			panic(err)
 		}
+		defaultNetwork = defaultNet
 
 		iprange := net.IPNet{
 			IP:   net.ParseIP("200::"),
@@ -399,6 +401,9 @@ func main() {
 			Major: core.ProtocolVersionMajor,
 			Minor: core.ProtocolVersionMinor,
 		})
+		if defaultNetwork != nil {
+			options = append(options, multicast.Network{Network: defaultNetwork})
+		}
 		if n.multicast, err = multicast.New(multicastCoreAdapter{core: n.core}, logger, options...); err != nil {
 			panic(err)
 		}

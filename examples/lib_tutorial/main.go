@@ -25,7 +25,6 @@ import (
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
-	"github.com/asciimoth/gonnect/loopback"
 
 	"github.com/asciimoth/ygg/ygglib/autopeer"
 	"github.com/asciimoth/ygg/ygglib/config"
@@ -78,14 +77,14 @@ func main() {
 }
 
 type demo struct {
-	network   *loopback.LoopbackNetwork
+	network   *gonnect.LoopbackNetwork
 	transport *meteredTransport
 	server    *node
 	client    *node
 }
 
 func newDemo() (*demo, error) {
-	network := loopback.NewLoopbackNetwok()
+	network := gonnect.NewLoopbackNetwok()
 	baseTransport := transport.NewTCPTransport()
 	metered := &meteredTransport{base: baseTransport}
 
@@ -486,6 +485,7 @@ func startLinkLocalAutopeering(
 	return multicast.New(
 		multicastCoreAdapter{core: coreNode},
 		ygglogger.Discard(),
+		multicast.Network{Network: network},
 		multicast.ProtocolVersion{
 			Major: core.ProtocolVersionMajor,
 			Minor: core.ProtocolVersionMinor,
@@ -554,4 +554,4 @@ func mustParseURL(raw string) *url.URL {
 }
 
 var _ transport.Transport = (*meteredTransport)(nil)
-var _ gonnect.Network = (*loopback.LoopbackNetwork)(nil)
+var _ gonnect.Network = (*gonnect.LoopbackNetwork)(nil)

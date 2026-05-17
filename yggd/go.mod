@@ -3,9 +3,9 @@ module github.com/asciimoth/ygg/yggd
 go 1.25.5
 
 require (
-	github.com/asciimoth/gonnect v0.12.0
-	github.com/asciimoth/mnlib v0.2.0
-	github.com/asciimoth/tuntap v0.3.1
+	github.com/asciimoth/gonnect v0.13.0
+	github.com/asciimoth/mnlib v0.2.1
+	github.com/asciimoth/tuntap v0.3.2
 	github.com/asciimoth/ygg/ygglib v0.0.0
 	github.com/coder/websocket v1.8.14
 	github.com/hashicorp/go-syslog v1.0.0
@@ -15,8 +15,8 @@ require (
 	github.com/olekukonko/tablewriter v1.1.3
 	github.com/quic-go/quic-go v0.59.0
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/sys v0.42.0
-	golang.org/x/text v0.34.0
+	golang.org/x/sys v0.44.0
+	golang.org/x/text v0.37.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 	golang.zx2c4.com/wireguard/windows v0.5.3
 	suah.dev/protect v1.2.4
@@ -26,9 +26,9 @@ require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e // indirect
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d // indirect
 	github.com/asciimoth/bufpool v0.3.0 // indirect
-	github.com/asciimoth/gonnect-netstack v0.3.15 // indirect
+	github.com/asciimoth/gonnect-netstack v0.4.15 // indirect
 	github.com/asciimoth/ident v0.2.0 // indirect
-	github.com/asciimoth/socksgo v0.2.10 // indirect
+	github.com/asciimoth/socksgo v0.2.11 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -43,15 +43,14 @@ require (
 	github.com/olekukonko/errors v1.2.0 // indirect
 	github.com/olekukonko/ll v0.1.6 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
-	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/xtaci/smux v1.5.44 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.41.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	gvisor.dev/gvisor v0.0.0-20260325202830-7644cf3a343c // indirect
 )
 

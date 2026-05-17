@@ -58,6 +58,8 @@ func slicesClone(in []string) []string {
 }
 
 type weirdNetwork struct {
+	*gonnect.RejectNetwork
+
 	values []int
 }
 

@@ -12,7 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/asciimoth/gonnect/native"
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/asciimoth/ygg/ygglib/transport"
@@ -49,7 +49,7 @@ func TestTransportEcho(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			network := &native.Network{}
+			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 			if err := network.Up(); err != nil {
 				t.Fatal(err)
 			}
@@ -110,7 +110,7 @@ func TestTransportEcho(t *testing.T) {
 }
 
 func TestSecureWebSocketListenUnsupported(t *testing.T) {
-	network := &native.Network{}
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 	if err := network.Up(); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestWebSocketListenOriginWildcard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			network := &native.Network{}
+			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 			if err := network.Up(); err != nil {
 				t.Fatal(err)
 			}

@@ -149,6 +149,38 @@ func (n *routeNetwork) ListenUDP(ctx context.Context, network, laddr string) (go
 	return n.networkFor("ListenUDP", network, laddr).ListenUDP(ctx, network, laddr)
 }
 
+func (n *routeNetwork) ListenPacketConfig(ctx context.Context, lc *gonnect.ListenConfig, network, address string) (gonnect.PacketConn, error) {
+	return n.networkFor("ListenPacketConfig", network, address).ListenPacketConfig(ctx, lc, network, address)
+}
+
+func (n *routeNetwork) ListenUDPConfig(ctx context.Context, lc *gonnect.ListenConfig, network, laddr string) (gonnect.UDPConn, error) {
+	return n.networkFor("ListenUDPConfig", network, laddr).ListenUDPConfig(ctx, lc, network, laddr)
+}
+
+func (n *routeNetwork) ListenMulticastUDP(ctx context.Context, network, address string, opts gonnect.MulticastOptions) (gonnect.MulticastPacketConn, error) {
+	return n.networkFor("ListenMulticastUDP", network, address).ListenMulticastUDP(ctx, network, address, opts)
+}
+
+func (n *routeNetwork) Interfaces() ([]gonnect.NetworkInterface, error) {
+	return n.direct.Interfaces()
+}
+
+func (n *routeNetwork) InterfaceAddrs() ([]net.Addr, error) {
+	return n.direct.InterfaceAddrs()
+}
+
+func (n *routeNetwork) InterfaceMulticastAddrs() ([]net.Addr, error) {
+	return n.direct.InterfaceMulticastAddrs()
+}
+
+func (n *routeNetwork) InterfacesByIndex(index int) ([]gonnect.NetworkInterface, error) {
+	return n.direct.InterfacesByIndex(index)
+}
+
+func (n *routeNetwork) InterfacesByName(name string) ([]gonnect.NetworkInterface, error) {
+	return n.direct.InterfacesByName(name)
+}
+
 func (n *routeNetwork) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
 	if resolver, ok := n.direct.(gonnect.Resolver); ok {
 		return resolver.LookupIP(ctx, network, host)

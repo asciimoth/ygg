@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/native"
 	"github.com/asciimoth/socksgo"
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/transport"
@@ -32,7 +32,7 @@ func NetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Network, er
 
 	switch cfg.Name() {
 	case transport.NetworkKindNative:
-		network := &native.Network{}
+		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := network.Up(); err != nil {
 			return nil, err
 		}
@@ -113,4 +113,80 @@ func (n *socksNetwork) DialUDP(ctx context.Context, network, laddr, raddr string
 
 func (n *socksNetwork) ListenUDP(ctx context.Context, network, laddr string) (gonnect.UDPConn, error) {
 	return n.client.ListenUDP(ctx, network, laddr)
+}
+
+func (n *socksNetwork) ListenPacketConfig(ctx context.Context, lc *gonnect.ListenConfig, network, address string) (gonnect.PacketConn, error) {
+	return n.client.ListenPacketConfig(ctx, lc, network, address)
+}
+
+func (n *socksNetwork) ListenUDPConfig(ctx context.Context, lc *gonnect.ListenConfig, network, laddr string) (gonnect.UDPConn, error) {
+	return n.client.ListenUDPConfig(ctx, lc, network, laddr)
+}
+
+func (n *socksNetwork) ListenMulticastUDP(ctx context.Context, network, address string, opts gonnect.MulticastOptions) (gonnect.MulticastPacketConn, error) {
+	return n.client.ListenMulticastUDP(ctx, network, address, opts)
+}
+
+func (n *socksNetwork) Interfaces() ([]gonnect.NetworkInterface, error) {
+	return n.client.Interfaces()
+}
+
+func (n *socksNetwork) InterfaceAddrs() ([]net.Addr, error) {
+	return n.client.InterfaceAddrs()
+}
+
+func (n *socksNetwork) InterfaceMulticastAddrs() ([]net.Addr, error) {
+	return n.client.InterfaceMulticastAddrs()
+}
+
+func (n *socksNetwork) InterfacesByIndex(index int) ([]gonnect.NetworkInterface, error) {
+	return n.client.InterfacesByIndex(index)
+}
+
+func (n *socksNetwork) InterfacesByName(name string) ([]gonnect.NetworkInterface, error) {
+	return n.client.InterfacesByName(name)
+}
+
+func (n *socksNetwork) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+	return n.client.LookupIP(ctx, network, host)
+}
+
+func (n *socksNetwork) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return n.client.LookupIPAddr(ctx, host)
+}
+
+func (n *socksNetwork) LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error) {
+	return n.client.LookupNetIP(ctx, network, host)
+}
+
+func (n *socksNetwork) LookupHost(ctx context.Context, host string) ([]string, error) {
+	return n.client.LookupHost(ctx, host)
+}
+
+func (n *socksNetwork) LookupAddr(ctx context.Context, addr string) ([]string, error) {
+	return n.client.LookupAddr(ctx, addr)
+}
+
+func (n *socksNetwork) LookupCNAME(ctx context.Context, host string) (string, error) {
+	return n.client.LookupCNAME(ctx, host)
+}
+
+func (n *socksNetwork) LookupPort(ctx context.Context, network, service string) (int, error) {
+	return n.client.LookupPort(ctx, network, service)
+}
+
+func (n *socksNetwork) LookupNS(ctx context.Context, name string) ([]*net.NS, error) {
+	return n.client.LookupNS(ctx, name)
+}
+
+func (n *socksNetwork) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
+	return n.client.LookupMX(ctx, name)
+}
+
+func (n *socksNetwork) LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, error) {
+	return n.client.LookupSRV(ctx, service, proto, name)
+}
+
+func (n *socksNetwork) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	return n.client.LookupTXT(ctx, name)
 }

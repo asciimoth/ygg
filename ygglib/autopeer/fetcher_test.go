@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/loopback"
 )
 
 type testLogger struct {
@@ -74,6 +73,8 @@ func (l *testLogger) countContains(needle string) int {
 }
 
 type stubNetwork struct {
+	*gonnect.RejectNetwork
+
 	dialFn func(context.Context, string, string) (net.Conn, error)
 }
 
@@ -176,8 +177,8 @@ func TestFetcherBuiltinLifecycleAndManager(t *testing.T) {
 }
 
 func TestFetcherLoopbackAndOverrides(t *testing.T) {
-	defaultNet := loopback.NewLoopbackNetwok()
-	overrideNet := loopback.NewLoopbackNetwok()
+	defaultNet := gonnect.NewLoopbackNetwok()
+	overrideNet := gonnect.NewLoopbackNetwok()
 
 	var defaultHits atomic.Int32
 	var overrideHits atomic.Int32
@@ -243,7 +244,7 @@ func TestFetcherLoopbackAndOverrides(t *testing.T) {
 }
 
 func TestFetcherDropsInFlightResultWhenSourceBecomesDisabled(t *testing.T) {
-	defaultNet := loopback.NewLoopbackNetwok()
+	defaultNet := gonnect.NewLoopbackNetwok()
 	logger := &testLogger{}
 	fetcher := NewFetcher(logger, 24*time.Hour)
 	source := "http://127.0.0.1:18083/peers.json"
@@ -320,7 +321,7 @@ func TestFetcherErrorsAndParsing(t *testing.T) {
 		t.Fatalf("expected logged dial error, got %q", logger.joined())
 	}
 
-	invalidNet := loopback.NewLoopbackNetwok()
+	invalidNet := gonnect.NewLoopbackNetwok()
 	runHTTPServer(t, invalidNet, "127.0.0.1:19001", http.StatusInternalServerError, "bad", nil)
 	sourceErr := "http://127.0.0.1:19001/peers.json"
 	fetcher.SetSources([]string{sourceErr})
@@ -532,7 +533,7 @@ func sampleDocument(label, endpoint string) string {
 
 func runHTTPServer(
 	t *testing.T,
-	network *loopback.LoopbackNetwork,
+	network *gonnect.LoopbackNetwork,
 	address string,
 	status int,
 	body string,

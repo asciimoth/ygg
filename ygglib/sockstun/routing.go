@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/asciimoth/gonnect"
-	gonnecthelpers "github.com/asciimoth/gonnect/helpers"
 	"github.com/asciimoth/mnlib"
 	"github.com/asciimoth/socksgo"
 	"github.com/asciimoth/ygg/ygglib/logger"
@@ -210,6 +209,41 @@ func (n *routeNetwork) DialUDP(ctx context.Context, network, laddr, raddr string
 func (n *routeNetwork) ListenUDP(ctx context.Context, network, laddr string) (gonnect.UDPConn, error) {
 	laddr = n.resolveAddress(ctx, "ListenUDP", network, laddr)
 	return n.networkFor("ListenUDP", network, laddr).ListenUDP(ctx, network, laddr)
+}
+
+func (n *routeNetwork) ListenPacketConfig(ctx context.Context, lc *gonnect.ListenConfig, network, address string) (gonnect.PacketConn, error) {
+	address = n.resolveAddress(ctx, "ListenPacketConfig", network, address)
+	return n.networkFor("ListenPacketConfig", network, address).ListenPacketConfig(ctx, lc, network, address)
+}
+
+func (n *routeNetwork) ListenUDPConfig(ctx context.Context, lc *gonnect.ListenConfig, network, laddr string) (gonnect.UDPConn, error) {
+	laddr = n.resolveAddress(ctx, "ListenUDPConfig", network, laddr)
+	return n.networkFor("ListenUDPConfig", network, laddr).ListenUDPConfig(ctx, lc, network, laddr)
+}
+
+func (n *routeNetwork) ListenMulticastUDP(ctx context.Context, network, address string, opts gonnect.MulticastOptions) (gonnect.MulticastPacketConn, error) {
+	address = n.resolveAddress(ctx, "ListenMulticastUDP", network, address)
+	return n.networkFor("ListenMulticastUDP", network, address).ListenMulticastUDP(ctx, network, address, opts)
+}
+
+func (n *routeNetwork) Interfaces() ([]gonnect.NetworkInterface, error) {
+	return n.direct.Interfaces()
+}
+
+func (n *routeNetwork) InterfaceAddrs() ([]net.Addr, error) {
+	return n.direct.InterfaceAddrs()
+}
+
+func (n *routeNetwork) InterfaceMulticastAddrs() ([]net.Addr, error) {
+	return n.direct.InterfaceMulticastAddrs()
+}
+
+func (n *routeNetwork) InterfacesByIndex(index int) ([]gonnect.NetworkInterface, error) {
+	return n.direct.InterfacesByIndex(index)
+}
+
+func (n *routeNetwork) InterfacesByName(name string) ([]gonnect.NetworkInterface, error) {
+	return n.direct.InterfacesByName(name)
 }
 
 func (n *routeNetwork) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
@@ -479,8 +513,8 @@ func (n *routeNetwork) resolveAddress(ctx context.Context, op, network, address 
 		return address
 	}
 
-	n.log.Debugf("sockstun resolver %s resolving address network=%q address=%q host=%q family=%q", op, network, address, host, gonnecthelpers.FamilyFromNetwork(network))
-	ips, err := resolver.LookupIP(ctx, gonnecthelpers.FamilyFromNetwork(network), host)
+	n.log.Debugf("sockstun resolver %s resolving address network=%q address=%q host=%q family=%q", op, network, address, host, gonnect.FamilyFromNetwork(network))
+	ips, err := resolver.LookupIP(ctx, gonnect.FamilyFromNetwork(network), host)
 	if err != nil || len(ips) == 0 {
 		if err != nil {
 			n.log.Debugf("sockstun resolver %s address lookup failed network=%q address=%q host=%q err=%v", op, network, address, host, err)
@@ -489,7 +523,7 @@ func (n *routeNetwork) resolveAddress(ctx context.Context, op, network, address 
 		}
 		return address
 	}
-	ip := gonnecthelpers.PickIP(ips, preferFamily(network))
+	ip := gonnect.PickIP(ips, preferFamily(network))
 	if ip == nil {
 		n.log.Debugf("sockstun resolver %s address lookup had no preferred IP network=%q address=%q host=%q ips=%q", op, network, address, host, formatIPs(ips))
 		return address
@@ -510,7 +544,7 @@ func (n *routeNetwork) lookupIPViaRouteResolver(ctx context.Context, network, ho
 	if resolver == nil {
 		return nil, noSuchHost(host)
 	}
-	ips, err := resolver.LookupIP(ctx, gonnecthelpers.FamilyFromNetwork(network), host)
+	ips, err := resolver.LookupIP(ctx, gonnect.FamilyFromNetwork(network), host)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +628,7 @@ func isIPLiteral(host string) bool {
 }
 
 func filterIPsByNetwork(ips []net.IP, network string) []net.IP {
-	family := gonnecthelpers.FamilyFromNetwork(network)
+	family := gonnect.FamilyFromNetwork(network)
 	out := make([]net.IP, 0, len(ips))
 	for _, ip := range ips {
 		if ip == nil {
@@ -657,7 +691,7 @@ func normalizeNoResolveZones(values []string) []string {
 }
 
 func preferFamily(network string) int {
-	switch gonnecthelpers.FamilyFromNetwork(network) {
+	switch gonnect.FamilyFromNetwork(network) {
 	case "ip4":
 		return 4
 	case "ip6":

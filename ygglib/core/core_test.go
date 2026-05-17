@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoth/gonnect/native"
+	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/ygg/ygglib/config"
 	ygglogger "github.com/asciimoth/ygg/ygglib/logger"
 	"github.com/asciimoth/ygg/ygglib/transport"
@@ -100,7 +100,7 @@ func CreateAndConnectTwo(t testing.TB, verbose bool) (nodeA *Core, nodeB *Core) 
 func newCoreTransportManager(t testing.TB, cert *tls.Certificate) *transport.Manager {
 	t.Helper()
 
-	network := &native.Network{}
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 	if err := network.Up(); err != nil {
 		t.Fatal(err)
 	}

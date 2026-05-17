@@ -21,8 +21,6 @@ import (
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect-netstack/helpers"
 	"github.com/asciimoth/gonnect-netstack/vtun"
-	"github.com/asciimoth/gonnect/loopback"
-	"github.com/asciimoth/gonnect/native"
 
 	"github.com/asciimoth/ygg/ygglib/config"
 	"github.com/asciimoth/ygg/ygglib/core"
@@ -186,11 +184,11 @@ func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTra
 
 	switch networkMode {
 	case "native":
-		left := &native.Network{}
+		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := left.Up(); err != nil {
 			t.Fatalf("network up left: %v", err)
 		}
-		right := &native.Network{}
+		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
 		if err := right.Up(); err != nil {
 			_ = left.Down()
 			t.Fatalf("network up right: %v", err)
@@ -201,7 +199,7 @@ func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTra
 		})
 		return left, right
 	case "loopback":
-		shared := loopback.NewLoopbackNetwok()
+		shared := gonnect.NewLoopbackNetwok()
 		if err := shared.Up(); err != nil {
 			t.Fatalf("network up: %v", err)
 		}

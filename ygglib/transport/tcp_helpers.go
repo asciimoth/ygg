@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/asciimoth/gonnect"
-	"github.com/asciimoth/gonnect/helpers"
 	"github.com/asciimoth/gonnect/sockopt"
 )
 
@@ -35,17 +34,17 @@ func getInterface(network Network, name string) (gonnect.NetworkInterface, error
 	if name == "" {
 		return nil, nil
 	}
-	if ifn, ok := unwrapNetwork(network).(gonnect.InterfaceNetwork); ok {
-		ifaces, err := ifn.InterfacesByName(name)
-		if err != nil {
-			return nil, err
-		}
-		if len(ifaces) == 0 {
-			return nil, fmt.Errorf("interface %q not found", name)
-		}
-		return ifaces[0], nil
+	if network == nil {
+		return nil, ErrSourceInterfaceUnsupported
 	}
-	return nil, ErrSourceInterfaceUnsupported
+	ifaces, err := network.InterfacesByName(name)
+	if err != nil {
+		return nil, err
+	}
+	if len(ifaces) == 0 {
+		return nil, fmt.Errorf("interface %q not found", name)
+	}
+	return ifaces[0], nil
 }
 
 func resolveTCPNetworkAndRemote(
@@ -274,6 +273,6 @@ func tcpDial(
 	if local != nil {
 		localAddr = local.String()
 	}
-	remoteAddr := helpers.JointIPPort(remote.IP, remote.Port)
+	remoteAddr := gonnect.JointIPPort(remote.IP, remote.Port)
 	return dialTCP.DialTCP(ctx, networkName, localAddr, remoteAddr)
 }
