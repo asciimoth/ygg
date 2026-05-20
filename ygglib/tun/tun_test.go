@@ -95,6 +95,7 @@ func newFakeTun(name string, mtu, mwo, mro int) *fakeTun {
 	}
 }
 
+func (f *fakeTun) IsNative() bool { return false }
 func (f *fakeTun) File() *os.File { return nil }
 func (f *fakeTun) MWO() int       { return f.mwo }
 func (f *fakeTun) MRO() int       { return f.mro }
