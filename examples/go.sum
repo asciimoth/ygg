@@ -4,10 +4,10 @@ github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d h1:UK9fsWbWqwIQkMCz
 github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d/go.mod h1:BCnxhRf47C/dy/e/D2pmB8NkB3dQVIrkD98b220rx5Q=
 github.com/asciimoth/bufpool v0.3.0 h1:tQMop/kZ3eOLSorM9i0cqtOIpxWQUroGZ6oNk5DTnQc=
 github.com/asciimoth/bufpool v0.3.0/go.mod h1:JV6H4hpj2bCS5Svr0wNqR+XOZFOOkdXfNZxCjm/3QHw=
-github.com/asciimoth/gonnect v0.14.0 h1:sfP4qYiP9egKrhi+AgYUuRBrDLiVzRLHI9WrHafIc8E=
-github.com/asciimoth/gonnect v0.14.0/go.mod h1:CohhruGEkUgKLF0ypR/RNFrdrqmJgUkKhvjMilED9Kk=
-github.com/asciimoth/gonnect-netstack v0.4.16 h1:jhHGIPvMMNOiDRmP+akSruP/0PSDG0n165SDLBGIyxY=
-github.com/asciimoth/gonnect-netstack v0.4.16/go.mod h1:P5MRE/ueLLo6iRJDrnIJ/S81uTZ+AhD/S7mvfFc0SdE=
+github.com/asciimoth/gonnect v0.15.0 h1:hiruqCDaA0a6SUT/gqx9anJJMppFBq03SrbOvAaJhqE=
+github.com/asciimoth/gonnect v0.15.0/go.mod h1:CohhruGEkUgKLF0ypR/RNFrdrqmJgUkKhvjMilED9Kk=
+github.com/asciimoth/gonnect-netstack v0.4.17 h1:PuIdbEAP/fbbLozmCK9hIVk4mpqHf/kzOMeZ27t8VYs=
+github.com/asciimoth/gonnect-netstack v0.4.17/go.mod h1:3oH4olx4tEwqCrbxA3TFrJNK5LTRmHYgg92/TK6y2AM=
 github.com/bits-and-blooms/bitset v1.24.2/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/bits-and-blooms/bitset v1.24.4 h1:95H15Og1clikBrKr/DuzMXkQzECs1M6hhoGXLwLQOZE=
 github.com/bits-and-blooms/bitset v1.24.4/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
