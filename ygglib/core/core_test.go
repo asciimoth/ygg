@@ -100,7 +100,7 @@ func CreateAndConnectTwo(t testing.TB, verbose bool) (nodeA *Core, nodeB *Core) 
 func newCoreTransportManager(t testing.TB, cert *tls.Certificate) *transport.Manager {
 	t.Helper()
 
-	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 	if err := network.Up(); err != nil {
 		t.Fatal(err)
 	}

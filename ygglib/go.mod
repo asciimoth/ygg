@@ -5,10 +5,10 @@ go 1.25.5
 require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
-	github.com/asciimoth/gonnect v0.17.0
-	github.com/asciimoth/gonnect-netstack v0.4.19
-	github.com/asciimoth/mnlib v0.2.5
-	github.com/asciimoth/socksgo v0.2.15
+	github.com/asciimoth/gonnect v0.19.0
+	github.com/asciimoth/gonnect-netstack v0.4.20
+	github.com/asciimoth/mnlib v0.2.6
+	github.com/asciimoth/socksgo v0.2.24
 	github.com/hjson/hjson-go/v4 v4.6.0
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
@@ -19,6 +19,7 @@ require (
 require (
 	github.com/asciimoth/bufpool v0.3.0 // indirect
 	github.com/asciimoth/ident v0.2.0 // indirect
+	github.com/asciimoth/putback v0.3.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/coder/websocket v1.8.14 // indirect

@@ -594,7 +594,7 @@ func closeAll(closers []io.Closer) {
 func NewBuiltinNetwork(kind string) (Network, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case NetworkKindNative:
-		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 		if err := network.Up(); err != nil {
 			return nil, err
 		}

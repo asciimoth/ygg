@@ -100,7 +100,7 @@ func newCompatNodes(t *testing.T) (*Core, *Core) {
 func newCompatManager(t *testing.T, scheme string, tlsConfig *tls.Config) *transport.Manager {
 	t.Helper()
 
-	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 	require_NoError(t, network.Up())
 
 	manager := transport.NewManager(network)

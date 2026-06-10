@@ -32,7 +32,7 @@ func NetworkFromConfig(cfg config.TransportNetworkConfig) (transport.Network, er
 
 	switch cfg.Name() {
 	case transport.NetworkKindNative:
-		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+		network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 		if err := network.Up(); err != nil {
 			return nil, err
 		}

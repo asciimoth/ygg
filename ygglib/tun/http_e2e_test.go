@@ -184,11 +184,11 @@ func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTra
 
 	switch networkMode {
 	case "native":
-		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 		if err := left.Up(); err != nil {
 			t.Fatalf("network up left: %v", err)
 		}
-		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 		if err := right.Up(); err != nil {
 			_ = left.Down()
 			t.Fatalf("network up right: %v", err)

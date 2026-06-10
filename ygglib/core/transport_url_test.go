@@ -100,7 +100,7 @@ func newSilentCompatNodes(t *testing.T) (*Core, *Core) {
 func newSilentCompatManager(t *testing.T, cert *tls.Certificate) *transport.Manager {
 	t.Helper()
 
-	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build())
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
 	require_NoError(t, network.Up())
 
 	manager := transport.NewManager(network)

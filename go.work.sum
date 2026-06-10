@@ -4,9 +4,17 @@ github.com/Microsoft/go-winio v0.6.0 h1:slsWYD/zyx7lCXoZVlvQrj0hPTM1HI4+v1sIda2y
 github.com/Microsoft/go-winio v0.6.0/go.mod h1:cTAf44im0RAYeL23bpB+fzCyDH2MJiz2BO69KH/soAE=
 github.com/Microsoft/hcsshim v0.9.12 h1:0Wgl1fRF4WmBuqP6EnHk2w3m7CCCumD/KUumZxp7vKg=
 github.com/Microsoft/hcsshim v0.9.12/go.mod h1:qAiPvMgZoM0wpkVg6qMdSEu+1VtI6/qHOOPkTGt8ftQ=
+github.com/asciimoth/gonnect v0.19.0 h1:j4huh4I3i8vG/UZCSDDPtrFea20lY7jc4Cz6JQ+yXY0=
+github.com/asciimoth/gonnect v0.19.0/go.mod h1:CohhruGEkUgKLF0ypR/RNFrdrqmJgUkKhvjMilED9Kk=
 github.com/asciimoth/gonnect-netstack v0.4.16/go.mod h1:P5MRE/ueLLo6iRJDrnIJ/S81uTZ+AhD/S7mvfFc0SdE=
+github.com/asciimoth/gonnect-netstack v0.4.20 h1:Zc84PAaHwNCqUtc2mE8v1tOhcfRFyyM6t2yNFL+XUlc=
+github.com/asciimoth/gonnect-netstack v0.4.20/go.mod h1:Ub+D7j9fQaVw7TK6o7+a5QOtnLBq3NhMcu/fTpAjltg=
+github.com/asciimoth/mnlib v0.2.6 h1:rU5icwTYC2dfiEcOWmYUJfXEmZYnspVpvoMblkRBQTc=
+github.com/asciimoth/mnlib v0.2.6/go.mod h1:8qa/aS0IG0AZ6tFpi0jXN+NOMHZE4o13ZMDyx3PTLpA=
 github.com/asciimoth/putback v0.3.0 h1:NKyX1K2yR/pHt9ov7BifA7qd8oMSOhsit4hMf694e30=
 github.com/asciimoth/putback v0.3.0/go.mod h1:K4u9GV2oQVToze+iKSA/e2V26lusyirYqBZuOZnw2YA=
+github.com/asciimoth/socksgo v0.2.24 h1:d156G7F7B3U30fjLsV55Ve7s7xJXafl49c+5qq9rto0=
+github.com/asciimoth/socksgo v0.2.24/go.mod h1:kSRegIZy8CqPaf/7aP0rfqDozCj9CWwmFS2msHJvog8=
 github.com/bazelbuild/rules_go v0.44.2 h1:H2nzlC9VLKeVW1D90bahFSszpDE5qvtKr95Nz7BN0WQ=
 github.com/bazelbuild/rules_go v0.44.2/go.mod h1:Dhcz716Kqg1RHNWos+N6MlXNkjNP2EwZQ0LukRKJfMs=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
