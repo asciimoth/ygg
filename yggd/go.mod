@@ -3,8 +3,8 @@ module github.com/asciimoth/ygg/yggd
 go 1.25.5
 
 require (
-	github.com/asciimoth/gonnect v0.26.0
-	github.com/asciimoth/mnlib v0.2.7
+	github.com/asciimoth/gonnect v0.27.0
+	github.com/asciimoth/mnlib v0.2.8
 	github.com/asciimoth/tuntap v0.3.10
 	github.com/asciimoth/ygg/ygglib v0.0.0
 	github.com/coder/websocket v1.8.14
@@ -26,10 +26,10 @@ require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e // indirect
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d // indirect
 	github.com/asciimoth/bufpool v0.3.0 // indirect
-	github.com/asciimoth/gonnect-netstack v0.4.24 // indirect
+	github.com/asciimoth/gonnect-netstack v0.4.25 // indirect
 	github.com/asciimoth/ident v0.2.0 // indirect
 	github.com/asciimoth/putback v0.3.0 // indirect
-	github.com/asciimoth/socksgo v0.3.0 // indirect
+	github.com/asciimoth/socksgo v0.3.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
