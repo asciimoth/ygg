@@ -6,8 +6,8 @@ github.com/asciimoth/bufpool v0.3.0 h1:tQMop/kZ3eOLSorM9i0cqtOIpxWQUroGZ6oNk5DTn
 github.com/asciimoth/bufpool v0.3.0/go.mod h1:JV6H4hpj2bCS5Svr0wNqR+XOZFOOkdXfNZxCjm/3QHw=
 github.com/asciimoth/gonnect v0.27.0 h1:s4swJiVO00ezTDZud9d8dBPa/BeQgrt4wXmZBj4J8+Q=
 github.com/asciimoth/gonnect v0.27.0/go.mod h1:CohhruGEkUgKLF0ypR/RNFrdrqmJgUkKhvjMilED9Kk=
-github.com/asciimoth/gonnect-netstack v0.4.25 h1:IhgsCl//YqIg7SgtiILDx99fsxmbIdQ0jjtfoJzAe9o=
-github.com/asciimoth/gonnect-netstack v0.4.25/go.mod h1:5Tzl2a4eqd3PQm+PAYGL5xda8rdILHnmEe+IfaelBg0=
+github.com/asciimoth/gonnect-netstack v0.4.26 h1:del0pkznxzgiL6TAvGp1HXxPO+abtSSKHlGbqVBtFzI=
+github.com/asciimoth/gonnect-netstack v0.4.26/go.mod h1:5Tzl2a4eqd3PQm+PAYGL5xda8rdILHnmEe+IfaelBg0=
 github.com/asciimoth/ident v0.2.0 h1:G6qaTnkxTH+idV5YzJ7AvgC2nLQDE/aoV7rPCOtN07I=
 github.com/asciimoth/ident v0.2.0/go.mod h1:JNNFnfM7/hdcXVkFBBOAU/vpJM+0gucYaAYwB694bT0=
 github.com/asciimoth/mnlib v0.2.8 h1:awrO1iRymNuLaz/xPZqXognOpMUfBXQxh6zYBONrP/A=
@@ -16,8 +16,8 @@ github.com/asciimoth/putback v0.3.0 h1:NKyX1K2yR/pHt9ov7BifA7qd8oMSOhsit4hMf694e
 github.com/asciimoth/putback v0.3.0/go.mod h1:K4u9GV2oQVToze+iKSA/e2V26lusyirYqBZuOZnw2YA=
 github.com/asciimoth/socksgo v0.3.1 h1:MFQRvX8wL1NFh+9hZWkeyHn+1JwSiGPLTeQ2pyRmtgo=
 github.com/asciimoth/socksgo v0.3.1/go.mod h1:jR8h2jx21mSZNKg5kYBUlM0smcUuQvWq7FNVi7/m8nU=
-github.com/asciimoth/tuntap v0.3.10 h1:gOyTazznRoihBi5ewMipZW3F8b+M9BD1QizCZaT26AU=
-github.com/asciimoth/tuntap v0.3.10/go.mod h1:0zpUB8YSNxvUFtq1MCMSWXnMJM1Wh6CQwS98mOIRvSI=
+github.com/asciimoth/tuntap v0.3.13 h1:QiHeuMf8+wXam0DC6SAEh2p3Vr5b+sKd7w7NwX9YNrc=
+github.com/asciimoth/tuntap v0.3.13/go.mod h1:fo/0zgdHKJhvQq7jF9FFz0uRT/bg5lqgUPQAcl1kfw8=
 github.com/bits-and-blooms/bitset v1.24.2/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/bits-and-blooms/bitset v1.24.4 h1:95H15Og1clikBrKr/DuzMXkQzECs1M6hhoGXLwLQOZE=
 github.com/bits-and-blooms/bitset v1.24.4/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=

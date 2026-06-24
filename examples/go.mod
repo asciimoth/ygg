@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/asciimoth/gonnect v0.27.0
-	github.com/asciimoth/gonnect-netstack v0.4.25
+	github.com/asciimoth/gonnect-netstack v0.4.26
 	github.com/asciimoth/ygg/ygglib v0.0.0
 )
 

@@ -6,8 +6,8 @@ github.com/asciimoth/bufpool v0.3.0 h1:tQMop/kZ3eOLSorM9i0cqtOIpxWQUroGZ6oNk5DTn
 github.com/asciimoth/bufpool v0.3.0/go.mod h1:JV6H4hpj2bCS5Svr0wNqR+XOZFOOkdXfNZxCjm/3QHw=
 github.com/asciimoth/gonnect v0.27.0 h1:s4swJiVO00ezTDZud9d8dBPa/BeQgrt4wXmZBj4J8+Q=
 github.com/asciimoth/gonnect v0.27.0/go.mod h1:CohhruGEkUgKLF0ypR/RNFrdrqmJgUkKhvjMilED9Kk=
-github.com/asciimoth/gonnect-netstack v0.4.25 h1:IhgsCl//YqIg7SgtiILDx99fsxmbIdQ0jjtfoJzAe9o=
-github.com/asciimoth/gonnect-netstack v0.4.25/go.mod h1:5Tzl2a4eqd3PQm+PAYGL5xda8rdILHnmEe+IfaelBg0=
+github.com/asciimoth/gonnect-netstack v0.4.26 h1:del0pkznxzgiL6TAvGp1HXxPO+abtSSKHlGbqVBtFzI=
+github.com/asciimoth/gonnect-netstack v0.4.26/go.mod h1:5Tzl2a4eqd3PQm+PAYGL5xda8rdILHnmEe+IfaelBg0=
 github.com/asciimoth/irca v0.2.0 h1:WqOo5uXlbusY3aVIWP2+S4+pzHZbqsbu41Upi/7m/pw=
 github.com/asciimoth/irca v0.2.0/go.mod h1:0mZkrhJ9zvtGU7l1K0W8SckN6LF2i5epFjJTMooaV6E=
 github.com/asciimoth/mnlib v0.2.8 h1:awrO1iRymNuLaz/xPZqXognOpMUfBXQxh6zYBONrP/A=
