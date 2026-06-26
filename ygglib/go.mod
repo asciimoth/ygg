@@ -5,10 +5,10 @@ go 1.25.5
 require (
 	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
-	github.com/asciimoth/gonnect v0.28.0
-	github.com/asciimoth/gonnect-netstack v0.4.27
-	github.com/asciimoth/mnlib v0.2.9
-	github.com/asciimoth/socksgo v0.3.2
+	github.com/asciimoth/gonnect v0.29.0
+	github.com/asciimoth/gonnect-netstack v0.4.28
+	github.com/asciimoth/mnlib v0.2.10
+	github.com/asciimoth/socksgo v0.3.3
 	github.com/hjson/hjson-go/v4 v4.6.0
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0

@@ -3,8 +3,8 @@ module github.com/asciimoth/ygg/examples
 go 1.25.5
 
 require (
-	github.com/asciimoth/gonnect v0.28.0
-	github.com/asciimoth/gonnect-netstack v0.4.27
+	github.com/asciimoth/gonnect v0.29.0
+	github.com/asciimoth/gonnect-netstack v0.4.28
 	github.com/asciimoth/ygg/ygglib v0.0.0
 )
 
