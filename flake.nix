@@ -50,7 +50,7 @@
         src = ./.;
         modRoot = "yggd";
         env.GOWORK = "off";
-        vendorHash = "sha256-88K/toL5kW8rMrag4UhwynutcfYhakjNEw8TtcS+s2Q=";
+        vendorHash = "sha256-S6AYL+HWomPY4o9raZJFo3kG3Ha/WgaEEyu5jIuePbg=";
         subPackages = [
           "yggd"
           "yggctl"
