@@ -442,7 +442,10 @@ func (m *Multicast) listen() {
 			if !m.IsStarted() {
 				return
 			}
-			panic(err)
+			// Packet socket errors can be temporary. Keep discovery available and
+			// let Stop terminate the loop by clearing the running state.
+			m.log.Warn("Multicast listener read error:", err)
+			continue
 		}
 		if rcm.Dst != nil {
 			// Windows can't set the flag needed to return a non-nil value here
@@ -467,7 +470,12 @@ func (m *Multicast) listen() {
 		case adv.PublicKey.Equal(m.core.PublicKey()):
 			continue
 		}
-		from := fromAddr.(*net.UDPAddr)
+		from, ok := fromAddr.(*net.UDPAddr)
+		if !ok {
+			// Multicast advertisements are UDP datagrams. Ignore packet sources
+			// that a wrapped or platform-specific socket reports differently.
+			continue
+		}
 		from.Port = int(adv.Port)
 		var interfaces map[string]*interfaceInfo
 		phony.Block(m, func() {

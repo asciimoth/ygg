@@ -281,12 +281,8 @@ func (k *keyStore) readPC(p []byte) (int, error) {
 }
 
 func (k *keyStore) writePC(bs []byte) (int, error) {
-	if bs[0]&0xf0 != 0x60 {
-		return 0, errors.New("not an IPv6 packet") // not IPv6
-	}
-	if len(bs) < 40 {
-		strErr := fmt.Sprint("undersized IPv6 packet, length: ", len(bs))
-		return 0, errors.New(strErr)
+	if err := validateIPv6Packet(bs); err != nil {
+		return 0, err
 	}
 	var srcAddr, dstAddr address.Address
 	var srcSubnet, dstSubnet address.Subnet
@@ -308,6 +304,25 @@ func (k *keyStore) writePC(bs []byte) (int, error) {
 		return 0, errors.New("invalid destination address")
 	}
 	return len(bs), nil
+}
+
+// validateIPv6Packet checks the fixed header fields that writePC reads. Keep
+// this validation separate from routing so malformed-input tests do not need a
+// running core or routing table.
+func validateIPv6Packet(bs []byte) error {
+	// Check the length before the version nibble. Empty reads can occur at API
+	// boundaries and must be reported to the caller instead of causing a panic.
+	if len(bs) == 0 {
+		return errors.New("empty packet")
+	}
+	if bs[0]&0xf0 != 0x60 {
+		return errors.New("not an IPv6 packet") // not IPv6
+	}
+	if len(bs) < 40 {
+		strErr := fmt.Sprint("undersized IPv6 packet, length: ", len(bs))
+		return errors.New(strErr)
+	}
+	return nil
 }
 
 // Exported API

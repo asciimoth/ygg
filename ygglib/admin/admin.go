@@ -132,7 +132,7 @@ func (a *AdminSocket) startSocket() error {
 		case "unix":
 			if _, err := os.Stat(u.Path); err == nil {
 				a.log.Debug("Admin socket", u.Path, "already exists, trying to clean up")
-				if _, err := net.DialTimeout("unix", u.Path, time.Second*2); err == nil || err.(net.Error).Timeout() {
+				if unixSocketInUse(u.Path, net.DialTimeout) {
 					a.log.Err("Admin socket", u.Path, "already exists and is in use by another process")
 					return fmt.Errorf("admin socket %q already exists and is in use", u.Path)
 				} else {
@@ -146,9 +146,8 @@ func (a *AdminSocket) startSocket() error {
 			}
 			a.listener, err = net.Listen("unix", u.Path)
 			if err == nil {
-				switch u.Path[:1] {
-				case "@": // maybe abstract namespace
-				default:
+				// Abstract UNIX sockets do not have a filesystem entry to chmod.
+				if u.Path != "" && u.Path[0] != '@' {
 					if err := os.Chmod(u.Path, 0660); err != nil {
 						a.log.Warn("WARNING:", u.Path, "may have unsafe permissions!")
 					}
@@ -173,6 +172,21 @@ func (a *AdminSocket) startSocket() error {
 	a.done = make(chan struct{})
 	go a.listen()
 	return nil
+}
+
+// unixSocketInUse reports whether an existing UNIX socket should be preserved.
+// A successful connection proves that the socket is active. A timeout is also
+// treated as active because removing a socket from an unresponsive process can
+// disrupt that process. Other errors identify a stale socket. The injected dial
+// function keeps the error classification deterministic in tests.
+func unixSocketInUse(path string, dial func(string, string, time.Duration) (net.Conn, error)) bool {
+	conn, err := dial("unix", path, 2*time.Second)
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func (a *AdminSocket) SetupCoreHandlers() {

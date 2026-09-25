@@ -1,12 +1,57 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/asciimoth/ygg/ygglib/autopeer"
+	"golang.org/x/text/encoding/unicode"
 )
+
+func TestNodeConfigReadFromInputEncoding(t *testing.T) {
+	const hjsonConfig = "{\nTunType: none\n}"
+	utf16LittleEndian, err := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).
+		NewEncoder().Bytes([]byte(hjsonConfig))
+	if err != nil {
+		t.Fatalf("encode little-endian UTF-16 fixture: %v", err)
+	}
+	utf16BigEndian, err := unicode.UTF16(unicode.BigEndian, unicode.UseBOM).
+		NewEncoder().Bytes([]byte(hjsonConfig))
+	if err != nil {
+		t.Fatalf("encode big-endian UTF-16 fixture: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		input       []byte
+		wantErr     bool
+		wantTunType string
+	}{
+		{name: "empty", input: nil, wantErr: true},
+		{name: "one byte", input: []byte{'{'}, wantErr: true},
+		{name: "normal HJSON", input: []byte(hjsonConfig), wantTunType: "none"},
+		{name: "little-endian UTF-16 with BOM", input: utf16LittleEndian, wantTunType: "none"},
+		{name: "big-endian UTF-16 with BOM", input: utf16BigEndian, wantTunType: "none"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cfg NodeConfig
+			n, err := cfg.ReadFrom(bytes.NewReader(tt.input))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ReadFrom() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if n != int64(len(tt.input)) {
+				t.Fatalf("ReadFrom() bytes = %d, want %d", n, len(tt.input))
+			}
+			if !tt.wantErr && cfg.TunType != tt.wantTunType {
+				t.Fatalf("ReadFrom() TunType = %q, want %q", cfg.TunType, tt.wantTunType)
+			}
+		})
+	}
+}
 
 func assertDefaultTransportMappings(t *testing.T, mappings map[string]TransportNetworkConfig) {
 	t.Helper()

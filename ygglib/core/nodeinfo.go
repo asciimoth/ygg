@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -139,16 +140,10 @@ func (c *Core) SetNodeInfo(given map[string]interface{}, privacy bool) error {
 }
 
 func (m *nodeinfo) getNodeInfo(keyHex string) (json.RawMessage, error) {
-	if keyHex == "" {
-		return nil, fmt.Errorf("no remote public key supplied")
+	key, err := decodeNodeInfoKey(keyHex)
+	if err != nil {
+		return nil, err
 	}
-	var key keyArray
-	var kbs []byte
-	var err error
-	if kbs, err = hex.DecodeString(keyHex); err != nil {
-		return nil, fmt.Errorf("failed to decode public key: %w", err)
-	}
-	copy(key[:], kbs)
 	ch := make(chan []byte, 1)
 	m.sendReq(nil, key, func(info json.RawMessage) {
 		ch <- info
@@ -165,4 +160,23 @@ func (m *nodeinfo) getNodeInfo(keyHex string) (json.RawMessage, error) {
 		}
 		return msg, nil
 	}
+}
+
+// decodeNodeInfoKey validates the text form before it is copied into the fixed
+// key array. Without the length check, copy would truncate long keys and pad
+// short keys with zero bytes, which could send a request to the wrong identity.
+func decodeNodeInfoKey(keyHex string) (keyArray, error) {
+	var key keyArray
+	if keyHex == "" {
+		return key, fmt.Errorf("no remote public key supplied")
+	}
+	kbs, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return key, fmt.Errorf("failed to decode public key: %w", err)
+	}
+	if len(kbs) != ed25519.PublicKeySize {
+		return key, fmt.Errorf("invalid public key length: got %d bytes, want %d", len(kbs), ed25519.PublicKeySize)
+	}
+	copy(key[:], kbs)
+	return key, nil
 }

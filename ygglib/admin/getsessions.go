@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/asciimoth/ygg/ygglib/address"
+	"github.com/asciimoth/ygg/ygglib/core"
 )
 
 type GetSessionsRequest struct{}
@@ -24,11 +25,21 @@ type SessionEntry struct {
 }
 
 func (a *AdminSocket) getSessionsHandler(_ *GetSessionsRequest, res *GetSessionsResponse) error {
-	sessions := a.core.GetSessions()
-	res.Sessions = make([]SessionEntry, 0, len(sessions))
+	res.Sessions = sessionEntries(a.core.GetSessions())
+	return nil
+}
+
+// sessionEntries converts core debug data to its admin representation. Entries
+// without a complete public key are omitted because no address can be derived.
+func sessionEntries(sessions []core.SessionInfo) []SessionEntry {
+	entries := make([]SessionEntry, 0, len(sessions))
 	for _, s := range sessions {
 		addr := address.AddrForKey(s.Key)
-		res.Sessions = append(res.Sessions, SessionEntry{
+		// Ignore incomplete debug entries instead of dereferencing a nil address.
+		if addr == nil {
+			continue
+		}
+		entries = append(entries, SessionEntry{
 			IPAddress: net.IP(addr[:]).String(),
 			PublicKey: hex.EncodeToString(s.Key[:]),
 			RXBytes:   DataUnit(s.RXBytes),
@@ -36,8 +47,8 @@ func (a *AdminSocket) getSessionsHandler(_ *GetSessionsRequest, res *GetSessions
 			Uptime:    s.Uptime.Seconds(),
 		})
 	}
-	slices.SortStableFunc(res.Sessions, func(a, b SessionEntry) int {
+	slices.SortStableFunc(entries, func(a, b SessionEntry) int {
 		return strings.Compare(a.PublicKey, b.PublicKey)
 	})
-	return nil
+	return entries
 }
