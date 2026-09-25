@@ -37,6 +37,8 @@ func (c *Core) _applyOption(opt SetupOption) (err error) {
 		pk := [32]byte{}
 		copy(pk[:], v)
 		c.config._allowedPublicKeys[pk] = struct{}{}
+	case GroupPassword:
+		c.config.groupPassword = string(v)
 	case TransportManager:
 		if v.Manager == nil {
 			return fmt.Errorf("transport manager is nil")
@@ -59,6 +61,16 @@ type NodeInfo map[string]interface{}
 type NodeInfoPrivacy bool
 type AllowedPublicKey ed25519.PublicKey
 type PeerFilter func(net.IP) bool
+
+// GroupPassword restricts end-to-end overlay sessions to nodes that use the
+// same password. It does not restrict direct peer links or prevent this node
+// from carrying routed traffic for nodes that use another password.
+//
+// Use a strong, high-entropy value. The session handshake is not a slow
+// password hash, so a weak password can be vulnerable to offline guessing.
+// An empty value keeps normal public-overlay compatibility.
+type GroupPassword string
+
 type TransportManager struct {
 	Manager *transport.Manager
 }
@@ -69,4 +81,5 @@ func (a NodeInfo) isSetupOption()         {}
 func (a NodeInfoPrivacy) isSetupOption()  {}
 func (a AllowedPublicKey) isSetupOption() {}
 func (a PeerFilter) isSetupOption()       {}
+func (a GroupPassword) isSetupOption()    {}
 func (a TransportManager) isSetupOption() {}

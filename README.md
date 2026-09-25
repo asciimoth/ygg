@@ -59,6 +59,14 @@ Transport: {
 }
 ```
 
+### Optional closed overlays
+
+The core and daemon support an optional group password for end-to-end overlay
+session authentication. An empty password keeps normal public-overlay
+compatibility. This setting does not restrict peer links or routing transit and
+is not a firewall. See [group-password authentication](docs/group-password.md)
+for configuration and security limits.
+
 ### Public-peer autopeering
 The `autopeer` module can periodically fetch public peer lists and add matching
 peers when configured connectivity thresholds are not met. Sources may be URLs

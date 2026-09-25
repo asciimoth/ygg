@@ -291,6 +291,7 @@ func main() {
 		for _, peer := range cfg.Peers {
 			options = append(options, core.Peer{URI: peer})
 		}
+		options = appendGroupPasswordOption(options, cfg.GroupPassword)
 		for intf, peers := range cfg.InterfacePeers {
 			for _, peer := range peers {
 				options = append(options, core.Peer{URI: peer, SourceInterface: intf})
@@ -515,6 +516,15 @@ func main() {
 	_ = n.multicast.Stop()
 	_ = n.tun.Stop()
 	n.core.Stop()
+}
+
+// appendGroupPasswordOption keeps an empty password equivalent to an omitted
+// option. This preserves compatibility with public-overlay configurations.
+func appendGroupPasswordOption(options []core.SetupOption, password string) []core.SetupOption {
+	if password != "" {
+		options = append(options, core.GroupPassword(password))
+	}
+	return options
 }
 
 func isPermissionError(err error) bool {

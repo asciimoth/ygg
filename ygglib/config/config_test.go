@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/asciimoth/ygg/ygglib/autopeer"
+	"github.com/hjson/hjson-go/v4"
 	"golang.org/x/text/encoding/unicode"
 )
 
@@ -50,6 +52,45 @@ func TestNodeConfigReadFromInputEncoding(t *testing.T) {
 				t.Fatalf("ReadFrom() TunType = %q, want %q", cfg.TunType, tt.wantTunType)
 			}
 		})
+	}
+}
+
+func TestGroupPasswordConfiguration(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "omitted", raw: "{\nTunType: none\n}"},
+		{name: "empty", raw: "{\nGroupPassword: \"\"\n}"},
+		{name: "configured", raw: "{\nGroupPassword: \"correct horse battery staple\"\n}", want: "correct horse battery staple"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cfg NodeConfig
+			if _, err := cfg.ReadFrom(strings.NewReader(tt.raw)); err != nil {
+				t.Fatalf("ReadFrom: %v", err)
+			}
+			if cfg.GroupPassword != tt.want {
+				t.Fatalf("GroupPassword = %q, want %q", cfg.GroupPassword, tt.want)
+			}
+		})
+	}
+}
+
+func TestGeneratedConfigIncludesEmptyGroupPassword(t *testing.T) {
+	cfg := GenerateConfig()
+	if cfg.GroupPassword != "" {
+		t.Fatalf("default GroupPassword = %q, want empty", cfg.GroupPassword)
+	}
+
+	encoded, err := hjson.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !bytes.Contains(encoded, []byte("GroupPassword")) {
+		t.Fatalf("generated configuration does not contain GroupPassword:\n%s", encoded)
 	}
 }
 

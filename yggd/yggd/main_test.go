@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/asciimoth/ygg/ygglib/config"
+	"github.com/asciimoth/ygg/ygglib/core"
 	"github.com/asciimoth/ygg/ygglib/transport"
 	"github.com/asciimoth/ygg/ygglib/transportcfg"
 )
@@ -39,6 +40,27 @@ func TestNewTransportManagerAppliesDefaultAnonymousNetworkBlocks(t *testing.T) {
 		if network != nil {
 			t.Fatalf("expected default transport mapping %q to be nil, got %#v", pattern, network)
 		}
+	}
+}
+
+func TestAppendGroupPasswordOption(t *testing.T) {
+	base := []core.SetupOption{core.NodeInfoPrivacy(true)}
+
+	withoutPassword := appendGroupPasswordOption(append([]core.SetupOption(nil), base...), "")
+	if len(withoutPassword) != len(base) {
+		t.Fatalf("empty password added an option: %#v", withoutPassword)
+	}
+
+	withPassword := appendGroupPasswordOption(append([]core.SetupOption(nil), base...), "secret")
+	if len(withPassword) != len(base)+1 {
+		t.Fatalf("non-empty password options = %d, want %d", len(withPassword), len(base)+1)
+	}
+	password, ok := withPassword[len(withPassword)-1].(core.GroupPassword)
+	if !ok {
+		t.Fatalf("last option has type %T, want core.GroupPassword", withPassword[len(withPassword)-1])
+	}
+	if password != "secret" {
+		t.Fatalf("password option = %q, want %q", password, "secret")
 	}
 }
 
