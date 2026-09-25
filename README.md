@@ -24,6 +24,7 @@ into libraries, and carry experimental daemon features.
   - [Machine-readable JSON](https://asciimoth.github.io/yggpeers/peers.json)
 - [Public services inside yggdrasil](https://yggdrasil-network.github.io/services.html)
 - [ygglib tutorial](lib-tutorial.md)
+- [Upstream sync checkpoint](docs/upstream-sync.md)
 - [Web demo](https://asciimoth.github.io/ygg/)
 
 ## What Changed From Upstream
