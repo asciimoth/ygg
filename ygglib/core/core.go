@@ -19,6 +19,11 @@ import (
 	"github.com/asciimoth/ygg/ygglib/version"
 )
 
+// ironwoodPeerMaxMessageSize is the maximum Ironwood wire message size. The
+// same value also limits each peer send queue and the local receive queue. A
+// queue drops older packets when its encoded size grows beyond this value.
+const ironwoodPeerMaxMessageSize uint64 = 65535 * 2
+
 // The Core object represents the Yggdrasil node. You should create a Core
 // object for each Yggdrasil node you plan to run.
 type Core struct {
@@ -101,7 +106,7 @@ func New(cert *tls.Certificate, logger Logger, opts ...SetupOption) (*Core, erro
 	if c.PacketConn, err = iwe.NewPacketConn(
 		c.secret,
 		iwn.WithBloomTransform(keyXform),
-		iwn.WithPeerMaxMessageSize(65535*2),
+		iwn.WithPeerMaxMessageSize(ironwoodPeerMaxMessageSize),
 		iwn.WithPathNotify(c.doPathNotify),
 	); err != nil {
 		return nil, fmt.Errorf("error creating encryption: %w", err)

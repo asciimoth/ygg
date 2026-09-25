@@ -3,7 +3,7 @@ module github.com/asciimoth/ygg/ygglib
 go 1.25.5
 
 require (
-	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e
+	github.com/Arceliar/ironwood v0.0.0-20260613025018-d50055b11f5e
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
 	github.com/asciimoth/gonnect v0.29.0
 	github.com/asciimoth/gonnect-netstack v0.4.28

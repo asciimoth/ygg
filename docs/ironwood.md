@@ -211,9 +211,11 @@ Important observable behavior:
 - the returned byte count is the number of bytes copied into your buffer
 - reads unblock with `types.ErrClosed` after `Close()`
 - reads respect `SetReadDeadline` and return `types.ErrTimeout`
-- if you stop reading, Ironwood can accumulate queued traffic and may eventually drop packets
+- if you stop reading, Ironwood keeps traffic up to its configured receive queue
+  limit and drops older queued packets after it reaches that limit
 
-The core `network.PacketConn` explicitly warns that failing to call `ReadFrom` may block the connection and/or leak memory.
+The receive queue has a byte limit, but applications must still call `ReadFrom`
+continuously. Packet delivery is not reliable while the consumer is blocked.
 
 ## MTU
 
@@ -226,6 +228,27 @@ The wrappers reduce usable MTU:
 - `encrypted.PacketConn`: base MTU minus encrypted session overhead
 
 The default peer maximum message size is 1 MiB, but the safe application MTU is smaller because Ironwood adds protocol overhead.
+
+### Queue limits in this repository
+
+The Yggdrasil core sets `WithPeerMaxMessageSize(65535 * 2)`. The resulting
+limit is 131,070 encoded bytes. Ironwood applies this value to all of these
+items:
+
+- the largest wire message accepted from a direct peer
+- the largest wire message sent to a direct peer
+- each direct peer's send queue
+- the local `network.PacketConn` receive queue
+
+The send and receive limits are separate. Each queue can contain up to 131,070
+encoded bytes. Protocol headers are part of the count, so the exact packet
+count depends on payload size and route length. Ironwood adds a packet and then
+drops old packets until the queue is at or below the limit. An oversized packet
+is therefore not retained.
+
+Queue saturation causes packet loss by design. It does not close the peer or
+disable routing. When the blocked writer or reader starts to make progress,
+new traffic can pass through the same connection.
 
 ## Closing and deadlines
 
@@ -324,7 +347,9 @@ These tune keepalive timing and failure detection for direct peer streams.
 
 - `WithPeerMaxMessageSize(uint64)`
 
-This changes the maximum protocol message size on each direct peer stream and therefore changes `MTU()`.
+This changes the maximum protocol message size on each direct peer stream and
+therefore changes `MTU()`. It also sets the byte limit for each peer send queue
+and the local receive queue.
 
 All directly connected peers in a deployment should use compatible sizing.
 
@@ -534,4 +559,3 @@ func main() {
 - Keep reading continuously.
 - Buffer unresolved traffic yourself if first-packet loss matters.
 - Use `encrypted` unless you have a strong reason not to.
-

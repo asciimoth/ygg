@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	github.com/Arceliar/ironwood v0.0.0-20260117132459-7017dbc41d8e // indirect
+	github.com/Arceliar/ironwood v0.0.0-20260613025018-d50055b11f5e // indirect
 	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d // indirect
 	github.com/asciimoth/bufpool v0.3.0 // indirect
 	github.com/asciimoth/gonnect-netstack v0.4.28 // indirect
