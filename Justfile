@@ -1,6 +1,11 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 
+check: typos tidy vet test-total
+
+typos:
+  typos
+
 test:
 	go test ./ygglib/... ./yggd/... ./examples/... ./web/... --race -count=1
 
