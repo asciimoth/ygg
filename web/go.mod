@@ -5,10 +5,10 @@ go 1.25.5
 replace github.com/asciimoth/ygg/ygglib => ../ygglib
 
 require (
-	github.com/asciimoth/gonnect v0.29.0
-	github.com/asciimoth/gonnect-netstack v0.4.28
+	github.com/asciimoth/gonnect v0.57.0
+	github.com/asciimoth/gonnect-netstack v0.9.1
 	github.com/asciimoth/irca v0.2.0
-	github.com/asciimoth/mnlib v0.2.10
+	github.com/asciimoth/mnlib v0.2.19
 	github.com/asciimoth/ygg/ygglib v0.0.0
 	github.com/coder/websocket v1.8.15
 )

@@ -184,11 +184,11 @@ func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTra
 
 	switch networkMode {
 	case "native":
-		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 		if err := left.Up(); err != nil {
 			t.Fatalf("network up left: %v", err)
 		}
-		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 		if err := right.Up(); err != nil {
 			_ = left.Down()
 			t.Fatalf("network up right: %v", err)
@@ -199,7 +199,7 @@ func newHTTPTestTransportNetworks(t *testing.T, networkMode string) (httpTestTra
 		})
 		return left, right
 	case "loopback":
-		shared := gonnect.NewLoopbackNetwok()
+		shared := gonnect.NewLoopbackNetwork()
 		if err := shared.Up(); err != nil {
 			t.Fatalf("network up: %v", err)
 		}

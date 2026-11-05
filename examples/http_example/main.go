@@ -172,18 +172,18 @@ type node struct {
 func newTransportNetworks(mode string) (transportExampleNetwork, transportExampleNetwork, func() error, error) {
 	switch mode {
 	case "native":
-		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+		left := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 		if err := left.Up(); err != nil {
 			return nil, nil, nil, fmt.Errorf("bring left transport network up: %w", err)
 		}
-		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+		right := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 		if err := right.Up(); err != nil {
 			_ = left.Down()
 			return nil, nil, nil, fmt.Errorf("bring right transport network up: %w", err)
 		}
 		return left, right, nil, nil
 	case "loopback":
-		shared := gonnect.NewLoopbackNetwok()
+		shared := gonnect.NewLoopbackNetwork()
 		if err := shared.Up(); err != nil {
 			return nil, nil, nil, fmt.Errorf("bring shared transport network up: %w", err)
 		}

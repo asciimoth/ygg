@@ -149,7 +149,7 @@ func (m *tlsMITM) handle(ctx context.Context, server *socksgo.Server, conn net.C
 	if m.log != nil {
 		m.log.Debugf("sockstun TLS MITM intercepted host=%q upstream=%q", host, target)
 	}
-	return gonnect.PipeConn(tlsConn, conn2)
+	return gonnect.PipeConn(tlsConn, conn2, nil)
 }
 
 func (m *tlsMITM) dialPlaintext(ctx context.Context, network, host string) (net.Conn, string, error) {

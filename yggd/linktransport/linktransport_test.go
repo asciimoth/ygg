@@ -57,7 +57,7 @@ func TestTransportEcho(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 			if err := network.Up(); err != nil {
 				t.Fatal(err)
 			}
@@ -122,7 +122,7 @@ func TestTransportEcho(t *testing.T) {
 }
 
 func TestSecureWebSocketListenUnsupported(t *testing.T) {
-	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 	if err := network.Up(); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestWebSocketListenOrigins(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+			network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 			if err := network.Up(); err != nil {
 				t.Fatal(err)
 			}
@@ -240,7 +240,7 @@ func TestWebSocketListenOrigins(t *testing.T) {
 }
 
 func TestWebSocketListenRejectsMissingSubprotocol(t *testing.T) {
-	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil)
+	network := gonnect.DetachNetwork(gonnect.NativeConfig{}.Build(), nil, nil)
 	if err := network.Up(); err != nil {
 		t.Fatal(err)
 	}

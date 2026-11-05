@@ -84,7 +84,7 @@ type demo struct {
 }
 
 func newDemo() (*demo, error) {
-	network := gonnect.NewLoopbackNetwok()
+	network := gonnect.NewLoopbackNetwork()
 	baseTransport := transport.NewTCPTransport()
 	metered := &meteredTransport{base: baseTransport}
 

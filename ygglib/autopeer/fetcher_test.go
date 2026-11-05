@@ -177,8 +177,8 @@ func TestFetcherBuiltinLifecycleAndManager(t *testing.T) {
 }
 
 func TestFetcherLoopbackAndOverrides(t *testing.T) {
-	defaultNet := gonnect.NewLoopbackNetwok()
-	overrideNet := gonnect.NewLoopbackNetwok()
+	defaultNet := gonnect.NewLoopbackNetwork()
+	overrideNet := gonnect.NewLoopbackNetwork()
 
 	var defaultHits atomic.Int32
 	var overrideHits atomic.Int32
@@ -244,7 +244,7 @@ func TestFetcherLoopbackAndOverrides(t *testing.T) {
 }
 
 func TestFetcherDropsInFlightResultWhenSourceBecomesDisabled(t *testing.T) {
-	defaultNet := gonnect.NewLoopbackNetwok()
+	defaultNet := gonnect.NewLoopbackNetwork()
 	logger := &testLogger{}
 	fetcher := NewFetcher(logger, 24*time.Hour)
 	source := "http://127.0.0.1:18083/peers.json"
@@ -321,7 +321,7 @@ func TestFetcherErrorsAndParsing(t *testing.T) {
 		t.Fatalf("expected logged dial error, got %q", logger.joined())
 	}
 
-	invalidNet := gonnect.NewLoopbackNetwok()
+	invalidNet := gonnect.NewLoopbackNetwork()
 	runHTTPServer(t, invalidNet, "127.0.0.1:19001", http.StatusInternalServerError, "bad", nil)
 	sourceErr := "http://127.0.0.1:19001/peers.json"
 	fetcher.SetSources([]string{sourceErr})
