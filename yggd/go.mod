@@ -3,7 +3,7 @@ module github.com/asciimoth/ygg/yggd
 go 1.25.5
 
 require (
-	github.com/asciimoth/gonnect v0.57.0
+	github.com/asciimoth/gonnect v0.58.0
 	github.com/asciimoth/mnlib v0.2.19
 	github.com/asciimoth/tuntap v0.4.4
 	github.com/asciimoth/ygg/ygglib v0.0.0

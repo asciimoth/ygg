@@ -121,7 +121,6 @@ func (m *Multicast) _start() error {
 	conn, err := m.config._network.ListenMulticastUDP(context.Background(), "udp6", listenString, gonnect.MulticastOptions{
 		ReuseAddr:    true,
 		ReusePort:    true,
-		RecvAnyIf:    true,
 		ControlFlags: gonnect.ControlDst,
 	})
 	if err != nil {

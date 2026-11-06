@@ -4,31 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"strconv"
 
 	"github.com/asciimoth/gonnect"
 	"github.com/asciimoth/gonnect/sockopt"
 )
-
-type lookupIPNetwork interface {
-	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
-}
-
-var nativeListen = func(ctx context.Context, network, address string) (net.Listener, error) {
-	var lc net.ListenConfig
-	return lc.Listen(ctx, network, address)
-}
-
-func unwrapNetwork(network Network) any {
-	if network == nil {
-		return nil
-	}
-	if wrapped := gonnect.GetWrapped(network); wrapped != nil {
-		return wrapped
-	}
-	return network
-}
 
 func getInterface(network Network, name string) (gonnect.NetworkInterface, error) {
 	if name == "" {
@@ -61,32 +43,16 @@ func resolveTCPNetworkAndRemote(
 		return "", nil, err
 	}
 
-	if ip := net.ParseIP(host); ip != nil {
+	if parsed, err := netip.ParseAddr(host); err == nil {
+		ip := net.IP(parsed.AsSlice())
 		networkName := "tcp6"
 		if ip.To4() != nil {
 			networkName = "tcp4"
 		}
-		return networkName, &net.TCPAddr{IP: ip, Port: port}, nil
+		return networkName, &net.TCPAddr{IP: ip, Port: port, Zone: parsed.Zone()}, nil
 	}
 
-	if resolver, ok := unwrapNetwork(network).(lookupIPNetwork); ok {
-		ips, err := resolver.LookupIP(ctx, "ip", host)
-		if err != nil {
-			return "", nil, err
-		}
-		for _, ip := range ips {
-			if ip == nil || ip.IsUnspecified() || ip.IsMulticast() {
-				continue
-			}
-			networkName := "tcp6"
-			if ip.To4() != nil {
-				networkName = "tcp4"
-			}
-			return networkName, &net.TCPAddr{IP: ip, Port: port}, nil
-		}
-	}
-
-	ips, err := net.LookupIP(host)
+	ips, err := network.LookupIP(ctx, "ip", host)
 	if err != nil {
 		return "", nil, err
 	}
@@ -176,29 +142,14 @@ func resolveListenAddrForInterfaceName(u *url.URL, ifname string) string {
 	if err != nil {
 		return u.Host
 	}
-	ip := net.ParseIP(host)
-	if ip != nil && !ip.IsUnspecified() {
-		if ip.IsLinkLocalUnicast() {
+	ip, err := netip.ParseAddr(host)
+	if err == nil && !ip.IsUnspecified() {
+		if ip.IsLinkLocalUnicast() && ip.Zone() == "" {
 			return net.JoinHostPort(host+"%"+ifname, port)
 		}
 		return u.Host
 	}
 	return net.JoinHostPort(host, port)
-}
-
-func linkLocalListenAddr(u *url.URL, ifname string) (string, bool) {
-	if ifname == "" {
-		return "", false
-	}
-	host, _, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		return "", false
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLinkLocalUnicast() {
-		return "", false
-	}
-	return resolveListenAddrForInterfaceName(u, ifname), true
 }
 
 func tcpListen(
@@ -213,19 +164,11 @@ func tcpListen(
 
 	iface, err := getInterface(network, opts.SourceInterface)
 	if err != nil {
-		if addr, ok := linkLocalListenAddr(u, opts.SourceInterface); ok && network != nil && network.IsNative() {
-			return nativeListen(ctx, "tcp6", addr)
-		}
 		return network.Listen(ctx, "tcp", resolveListenAddrForInterfaceName(u, opts.SourceInterface))
 	}
 
 	addr := resolveListenAddr(u, iface)
-	var listener net.Listener
-	if scopedAddr, ok := linkLocalListenAddr(u, opts.SourceInterface); ok && network != nil && network.IsNative() {
-		listener, err = nativeListen(ctx, "tcp6", scopedAddr)
-	} else {
-		listener, err = network.Listen(ctx, "tcp", addr)
-	}
+	listener, err := network.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -255,16 +198,6 @@ func tcpDial(
 		return network.Dial(ctx, "tcp", u.Host)
 	}
 
-	dialTCP, ok := unwrapNetwork(network).(interface {
-		DialTCP(
-			ctx context.Context,
-			network, laddr, raddr string,
-		) (gonnect.TCPConn, error)
-	})
-	if !ok {
-		return network.Dial(ctx, "tcp", u.Host)
-	}
-
 	local, err := localAddrForInterface(iface, remote, opts.SourceInterface)
 	if err != nil {
 		return network.Dial(ctx, "tcp", u.Host)
@@ -273,6 +206,5 @@ func tcpDial(
 	if local != nil {
 		localAddr = local.String()
 	}
-	remoteAddr := gonnect.JointIPPort(remote.IP, remote.Port)
-	return dialTCP.DialTCP(ctx, networkName, localAddr, remoteAddr)
+	return network.DialTCP(ctx, networkName, localAddr, remote.String())
 }

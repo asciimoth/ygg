@@ -864,20 +864,12 @@ func TestListenScopesLinkLocalAddressWhenInterfaceLookupUnavailable(t *testing.T
 }
 
 func TestNativeListenKeepsLinkLocalZone(t *testing.T) {
-	origNativeListen := nativeListen
-	t.Cleanup(func() {
-		nativeListen = origNativeListen
-	})
-
 	var gotNetwork, gotAddress string
-	nativeListen = func(_ context.Context, network, address string) (net.Listener, error) {
-		gotNetwork = network
-		gotAddress = address
-		return newSingleConnListener(), nil
-	}
-
 	transport := NewTCPTransport()
-	netw := &stubNetwork{native: true}
+	netw := &stubNetwork{native: true, listenFn: func(_ context.Context, network, address string) (net.Listener, error) {
+		gotNetwork, gotAddress = network, address
+		return newSingleConnListener(), nil
+	}}
 	ln, err := transport.Listen(context.Background(), netw, mustParseURL(t, "tcp://[fe80::1]:0"), Options{
 		SourceInterface: "wlp0s20f3",
 	})
@@ -886,8 +878,8 @@ func TestNativeListenKeepsLinkLocalZone(t *testing.T) {
 	}
 	_ = ln.Close()
 
-	if gotNetwork != "tcp6" {
-		t.Fatalf("listen network = %q, want %q", gotNetwork, "tcp6")
+	if gotNetwork != "tcp" {
+		t.Fatalf("listen network = %q, want %q", gotNetwork, "tcp")
 	}
 	if gotAddress != "[fe80::1%wlp0s20f3]:0" {
 		t.Fatalf("listen address = %q, want %q", gotAddress, "[fe80::1%wlp0s20f3]:0")
